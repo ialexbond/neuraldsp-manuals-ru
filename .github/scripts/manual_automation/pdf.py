@@ -100,6 +100,43 @@ def _normalize_font_name(name: str) -> str:
     return re.sub(r"^[A-Z]{6}\+", "", name).replace("-", " ").strip()
 
 
+def _chapter_opener_audit(document: fitz.Document) -> dict[str, Any]:
+    chapters: list[dict[str, Any]] = []
+    title_only_pages: list[int] = []
+    for item in document.get_toc(simple=True):
+        if len(item) < 3 or int(item[0]) != 2:
+            continue
+        normalized_title = re.sub(
+            r"[^\w]+", "", str(item[1]).casefold(), flags=re.UNICODE
+        )
+        if not re.match(r"^(?:0[1-9]|1[0-2])", normalized_title):
+            continue
+        page_number = int(item[2])
+        page_text = re.sub(
+            r"[^\w]+",
+            "",
+            document[page_number - 1].get_text("text").casefold(),
+            flags=re.UNICODE,
+        )
+        remaining_content = page_text.replace(normalized_title, "", 1)
+        title_only = len(remaining_content) < 8
+        chapters.append(
+            {
+                "title": str(item[1]),
+                "page": page_number,
+                "title_only": title_only,
+            }
+        )
+        if title_only:
+            title_only_pages.append(page_number)
+    return {
+        "chapter_count": len(chapters),
+        "title_only_pages": title_only_pages,
+        "chapters": chapters,
+        "valid": len(chapters) == 12 and not title_only_pages,
+    }
+
+
 def _font_audit(document: fitz.Document, font_directory: Path | None) -> dict[str, Any]:
     expected_files = {
         "IBMPlexSans": "IBMPlexSans-Regular.ttf",
@@ -222,9 +259,14 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
         for index, page in enumerate(document):
             text = page.get_text("text")
             images = page.get_images(full=True)
-            drawings = page.get_drawings()
-            if not text.strip() and not images and not drawings:
-                blank_pages.append(index + 1)
+            if not text.strip() and not images:
+                preview = page.get_pixmap(
+                    matrix=fitz.Matrix(0.2, 0.2),
+                    colorspace=fitz.csGRAY,
+                    alpha=False,
+                )
+                if min(preview.samples, default=255) >= 250:
+                    blank_pages.append(index + 1)
             image_placements += len(images)
             cyrillic_characters += len(re.findall(r"[А-Яа-яЁё]", text))
             blocks: list[tuple[fitz.Rect, str]] = []
@@ -278,6 +320,7 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
             page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5), alpha=False)
             rendered_pages += 1
         outline = document.get_toc(simple=False)
+        chapter_openers = _chapter_opener_audit(document)
         invalid_bookmarks = sum(
             len(item) < 3 or not 1 <= int(item[2]) <= document.page_count
             for item in outline
@@ -294,6 +337,7 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
             "invalid_link_count": invalid_links,
             "bookmark_count": len(outline),
             "invalid_bookmark_count": invalid_bookmarks,
+            "chapter_openers": chapter_openers,
             "tagged": b"/StructTreeRoot" in raw_pdf,
             "image_placement_count": image_placements,
             "cyrillic_character_count": cyrillic_characters,
@@ -341,6 +385,11 @@ def validate_pdf(
     if metrics["invalid_bookmark_count"]:
         errors.append(
             f"{metrics['invalid_bookmark_count']} invalid PDF bookmarks were found"
+        )
+    if not metrics["chapter_openers"]["valid"]:
+        errors.append(
+            "chapter openers must start on a new page and include following content; "
+            f"title-only pages={metrics['chapter_openers']['title_only_pages']}"
         )
     if not metrics["tagged"]:
         errors.append("PDF is not tagged")

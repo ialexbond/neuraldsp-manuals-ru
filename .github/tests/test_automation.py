@@ -6,6 +6,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
+import fitz
+
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 SCRIPTS = REPOSITORY / ".github" / "scripts"
@@ -14,6 +16,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from manual_automation.canonical import extract_snapshot  # noqa: E402
 from manual_automation.diffing import classify_change  # noqa: E402
+from manual_automation.pdf import _chapter_opener_audit, pdf_metrics  # noqa: E402
 from manual_automation.repository import (  # noqa: E402
     RepositoryPolicyError,
     expected_pdf_name,
@@ -30,6 +33,71 @@ TEST_CONFIG = {
     "maximum_changed_unit_count": 2,
     "maximum_changed_unit_ratio": 0.5,
 }
+
+
+class ChapterOpenerAuditTests(unittest.TestCase):
+    @staticmethod
+    def _document(
+        chapter_count: int = 12, title_only_chapter: int | None = None
+    ) -> fitz.Document:
+        document = fitz.open()
+        toc: list[list[object]] = [[1, "Chapters", 1]]
+        for chapter_number in range(1, chapter_count + 1):
+            title = f"{chapter_number:02d} Chapter {chapter_number}"
+            page = document.new_page()
+            text = title
+            if chapter_number != title_only_chapter:
+                text += f"\nSubstantive content for chapter {chapter_number}."
+            page.insert_text((72, 72), text)
+            toc.append([2, title, chapter_number])
+        document.set_toc(toc)
+        return document
+
+    def test_twelve_chapters_with_content_are_valid(self) -> None:
+        with self._document() as document:
+            audit = _chapter_opener_audit(document)
+
+        self.assertTrue(audit["valid"])
+        self.assertEqual(12, audit["chapter_count"])
+        self.assertEqual([], audit["title_only_pages"])
+
+    def test_title_only_chapter_is_invalid(self) -> None:
+        with self._document(title_only_chapter=6) as document:
+            audit = _chapter_opener_audit(document)
+
+        self.assertFalse(audit["valid"])
+        self.assertEqual([6], audit["title_only_pages"])
+
+    def test_wrong_chapter_count_is_invalid(self) -> None:
+        with self._document(chapter_count=11) as document:
+            audit = _chapter_opener_audit(document)
+
+        self.assertFalse(audit["valid"])
+        self.assertEqual(11, audit["chapter_count"])
+
+
+class PdfMetricsTests(unittest.TestCase):
+    def test_white_drawing_is_blank_but_black_drawing_is_not(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pdf_path = Path(temporary) / "drawings.pdf"
+            with fitz.open() as document:
+                white_page = document.new_page()
+                white_page.draw_rect(
+                    fitz.Rect(72, 72, 216, 216),
+                    color=(1, 1, 1),
+                    fill=(1, 1, 1),
+                )
+                black_page = document.new_page()
+                black_page.draw_rect(
+                    fitz.Rect(72, 72, 216, 216),
+                    color=(0, 0, 0),
+                    fill=(0, 0, 0),
+                )
+                document.save(pdf_path)
+
+            metrics = pdf_metrics(pdf_path)
+
+        self.assertEqual([1], metrics["blank_pages"])
 
 
 class CanonicalizationTests(unittest.TestCase):
