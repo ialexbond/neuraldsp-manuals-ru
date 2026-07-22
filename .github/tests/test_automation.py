@@ -16,7 +16,11 @@ sys.path.insert(0, str(SCRIPTS))
 
 from manual_automation.canonical import extract_snapshot  # noqa: E402
 from manual_automation.diffing import classify_change  # noqa: E402
-from manual_automation.pdf import _chapter_opener_audit, pdf_metrics  # noqa: E402
+from manual_automation.pdf import (  # noqa: E402
+    _chapter_opener_audit,
+    _page_top_content_audit,
+    pdf_metrics,
+)
 from manual_automation.repository import (  # noqa: E402
     RepositoryPolicyError,
     expected_pdf_name,
@@ -98,6 +102,50 @@ class PdfMetricsTests(unittest.TestCase):
             metrics = pdf_metrics(pdf_path)
 
         self.assertEqual([1], metrics["blank_pages"])
+
+
+class PageTopContentAuditTests(unittest.TestCase):
+    @staticmethod
+    def _audit_page(
+        text_baseline: float, *, callout: bool = False, vector_block: bool = False
+    ) -> dict[str, object]:
+        with fitz.open() as document:
+            page = document.new_page(width=595, height=842)
+            if callout:
+                page.draw_rect(
+                    fitz.Rect(100, 24, 495, 72),
+                    color=(0.88, 0.88, 0.88),
+                    fill=(0.88, 0.88, 0.88),
+                )
+            if vector_block:
+                page.draw_rect(
+                    fitz.Rect(220, 24, 375, 72),
+                    color=(0, 0, 0),
+                    fill=(0, 0, 0),
+                )
+            page.insert_text((100, text_baseline), "Light gray body content", color=(0.85, 0.85, 0.85))
+            return _page_top_content_audit(document)
+
+    def test_light_gray_content_at_top_passes(self) -> None:
+        audit = self._audit_page(80)
+
+        self.assertEqual([], audit["failures"])
+        self.assertIsNotNone(audit["pages"][0]["first_content_y_pt"])
+        self.assertLessEqual(audit["pages"][0]["first_content_y_pt"], 90)
+
+    def test_late_body_content_fails_with_page_and_y_position(self) -> None:
+        audit = self._audit_page(130)
+
+        self.assertEqual(1, len(audit["failures"]))
+        self.assertEqual(1, audit["failures"][0]["page"])
+        self.assertGreater(audit["failures"][0]["first_content_y_pt"], 90)
+
+    def test_callout_and_vector_blocks_count_as_top_content(self) -> None:
+        for options in ({"callout": True}, {"vector_block": True}):
+            with self.subTest(options=options):
+                audit = self._audit_page(130, **options)
+                self.assertEqual([], audit["failures"])
+                self.assertLess(audit["pages"][0]["first_content_y_pt"], 90)
 
 
 class CanonicalizationTests(unittest.TestCase):

@@ -142,6 +142,7 @@ Before an update branch is pushed, the local Codex automation verifies:
 - the renderer is the pinned Node Playwright 1.61.1 toolchain used by the accepted build;
 - all images loaded before printing;
 - every page is A4, contains visible content, and renders successfully;
+- the first visible central content on every page begins no lower than 90 pt from the top, counting text, images, rules, callouts, and vector drawings;
 - every chapter starts on a new page with its title and substantive content together;
 - page count remains within the configured tolerance of the previous edition;
 - no text block leaves the page or materially overlaps another text block;

@@ -18,6 +18,63 @@ class PdfValidationError(RuntimeError):
     """Raised when rendering or PDF validation fails."""
 
 
+_TOP_CONTENT_DPI = 144
+_TOP_CONTENT_MAX_Y_PT = 90.0
+_TOP_CONTENT_GRAY_THRESHOLD = 252
+_TOP_CONTENT_LEFT_PT = 80.0
+_TOP_CONTENT_RIGHT_PT = 515.0
+_TOP_CONTENT_MIN_PIXELS_PER_ROW = 8
+
+
+def _page_top_content_audit(document: fitz.Document) -> dict[str, Any]:
+    """Measure first body content on each rendered nonempty page.
+
+    Pages are rendered at 144 dpi in grayscale. The scan covers x=80..515 pt,
+    the established central body region. Any visible content counts: text,
+    images, rules, callouts, and vector drawings. Two consecutive rows with at
+    least eight pixels darker than 252 identify the top of that content.
+    """
+    scale = _TOP_CONTENT_DPI / 72
+    findings: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for index, page in enumerate(document):
+        pixmap = page.get_pixmap(
+            matrix=fitz.Matrix(scale, scale),
+            colorspace=fitz.csGRAY,
+            alpha=False,
+        )
+        # A fully white page is handled by the blank-page audit.
+        if min(pixmap.samples, default=255) == 255:
+            continue
+        left = max(0, min(pixmap.width, round(_TOP_CONTENT_LEFT_PT * scale)))
+        right = max(left, min(pixmap.width, round(_TOP_CONTENT_RIGHT_PT * scale)))
+        samples = pixmap.samples
+        rows = [
+            sum(
+                value < _TOP_CONTENT_GRAY_THRESHOLD
+                for value in samples[y * pixmap.stride + left : y * pixmap.stride + right]
+            )
+            >= _TOP_CONTENT_MIN_PIXELS_PER_ROW
+            for y in range(pixmap.height)
+        ]
+        first_row: int | None = None
+        for row_index in range(len(rows) - 1):
+            if rows[row_index] and rows[row_index + 1]:
+                first_row = row_index
+                break
+        y_pt = round(first_row / scale, 2) if first_row is not None else None
+        finding = {"page": index + 1, "first_content_y_pt": y_pt}
+        findings.append(finding)
+        if y_pt is None or y_pt > _TOP_CONTENT_MAX_Y_PT:
+            failures.append(finding)
+    return {
+        "dpi": _TOP_CONTENT_DPI,
+        "maximum_y_pt": _TOP_CONTENT_MAX_Y_PT,
+        "pages": findings,
+        "failures": failures,
+    }
+
+
 def render_html(document_path: Path, output_pdf: Path) -> dict[str, Any]:
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     node = shutil.which("node")
@@ -326,6 +383,7 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
             for item in outline
         )
         fonts = _font_audit(document, font_directory)
+        page_top_content = _page_top_content_audit(document)
         raw_pdf = pdf_path.read_bytes()
         return {
             "sha256": _sha256(pdf_path),
@@ -343,6 +401,7 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
             "cyrillic_character_count": cyrillic_characters,
             "out_of_bounds_text_blocks": out_of_bounds,
             "text_block_overlaps": overlaps,
+            "page_top_content": page_top_content,
             "rendered_page_count": rendered_pages,
             "fonts": fonts,
             "file_size": pdf_path.stat().st_size,
@@ -402,6 +461,17 @@ def validate_pdf(
     if metrics["text_block_overlaps"]:
         errors.append(
             f"{len(metrics['text_block_overlaps'])} material text-block overlaps were found"
+        )
+    if metrics["page_top_content"]["failures"]:
+        locations = ", ".join(
+            f"page {item['page']} y="
+            f"{item['first_content_y_pt'] if item['first_content_y_pt'] is not None else 'not found'} pt"
+            for item in metrics["page_top_content"]["failures"]
+        )
+        errors.append(
+            "first central body content must begin at or above "
+            f"{metrics['page_top_content']['maximum_y_pt']:.0f} pt from the top "
+            f"({locations})"
         )
     if not metrics["fonts"]["valid"]:
         errors.append(
