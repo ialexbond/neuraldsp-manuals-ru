@@ -1,0 +1,28 @@
+# Local automation workspaces and credentials
+.automation/
+.env
+*.local
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.github/node_modules/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Generated files must never be stored beside published manuals.
+manuals/**/assets/
+manuals/**/*.html
+manuals/**/*.json
+manuals/**/*.md
+manuals/**/*.png
+manuals/**/*.jpg
+manuals/**/*.jpeg
+manuals/**/*.svg
+manuals/**/*.zip
