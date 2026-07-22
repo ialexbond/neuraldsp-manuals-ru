@@ -12,7 +12,7 @@ Carefully formatted Russian editions of official Neural DSP manuals. The manual 
 | Quad Cortex | 4.0.0 | 2026-07-23 | Current at the initial automation baseline | [PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf) |
 <!-- MANUAL_STATUS:END -->
 
-The badge above shows whether the latest scheduled check completed successfully. The complete check date and result are available by opening the badge. An open issue with the [`update-detected`](https://github.com/ialexbond/neuraldsp-manuals-ru/issues?q=is%3Aissue+is%3Aopen+label%3Aupdate-detected) label means either that an update was detected or that the automation needs attention. Read the issue before deciding whether the PDF is outdated.
+The badge above shows the result of the latest **manually requested GitHub backup check**. It is not a monthly-status indicator. The regular update history belongs to the local Codex automation. An open issue with the [`update-detected`](https://github.com/ialexbond/neuraldsp-manuals-ru/issues?q=is%3Aissue+is%3Aopen+label%3Aupdate-detected) label means either that an update was detected or that the automation needs attention. Read the issue before deciding whether the PDF is outdated.
 
 ## File and release versioning
 
@@ -23,11 +23,11 @@ The badge above shows whether the latest scheduled check completed successfully.
 
 ## Update policy
 
-The official [Quad Cortex manual](https://neuraldsp.com/manual/quad-cortex#Global-Features) is checked automatically on the 23rd day of every month and can also be checked manually. Stable chapter and section identifiers are compared after presentation-only markup is removed.
+The local Codex automation is the **only automatic scheduler and source-change detector**. On the 23rd day of every month it checks the official [Quad Cortex manual](https://neuraldsp.com/manual/quad-cortex#Global-Features), compares stable chapter and section identifiers after presentation-only markup is removed, and records the result in its Codex task.
 
-When nothing changed, no branch, commit, pull request, or release is created. A safe text-only change is translated, rendered, and validated on an `update/quad-cortex/YYYY-MM-DD` branch before a **draft** pull request is opened. Human review and an explicit merge are mandatory before publication. Section additions, removals, layout changes, unexpectedly large updates, or failed PDF checks stop publication and create or update an `update-detected` issue for human review.
+When nothing changed, no branch, commit, pull request, or release is created. For a safe text-only change, the same Codex automation translates only the changed material using the user's existing Codex plan, rebuilds and validates the complete PDF, and prepares an `update/quad-cortex/YYYY-MM-DD` branch with a **draft** pull request. It does not use `OPENAI_API_KEY` or any separately billed translation API. Human review and an explicit merge are mandatory before publication. Section additions, removals, layout changes, unexpectedly large updates, or failed PDF checks stop publication for human review.
 
-[GitHub can automatically disable scheduled workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) in a public repository after 60 days without repository activity. A separate local Codex automation is therefore the watchdog: it checks that the monthly workflow remains enabled, re-enables it when necessary, and can trigger the same check manually. GitHub Actions history remains the authoritative run log.
+`.github/workflows/check-quad-cortex.yml` has no schedule. It can be started explicitly from GitHub Actions as a diagnostic backup, but it neither translates nor publishes an update. Its run history only describes manual backup checks; it is not the authoritative monthly log.
 
 The current single-repository design stores durable automation state as a dedicated prerelease asset. That ZIP is outside `manuals/quad-cortex/`, contains no credentials, and is publicly downloadable because this repository is public. Public manual releases contain the PDF; the state prerelease exists only to support future comparisons and rebuilds.
 

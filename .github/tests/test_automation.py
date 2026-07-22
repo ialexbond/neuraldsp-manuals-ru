@@ -209,32 +209,39 @@ class RepositoryPolicyTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_monthly_schedule_and_safety_contract_are_present(self) -> None:
+    def test_check_workflow_is_manual_only_and_has_no_paid_api_contract(self) -> None:
         check_workflow = (REPOSITORY / ".github" / "workflows" / "check-quad-cortex.yml").read_text(
             encoding="utf-8"
         )
         release_workflow = (
             REPOSITORY / ".github" / "workflows" / "release-quad-cortex.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn('cron: "17 3 23 * *"', check_workflow)
-        self.assertIn("workflow_dispatch:", check_workflow)
-        self.assertIn("update/quad-cortex/", check_workflow)
-        self.assertIn("steps.compare.outputs.status == 'unchanged'", check_workflow)
-        self.assertIn("Unexpected generated paths", check_workflow)
-        self.assertIn("gh pr create --draft --base main", check_workflow)
-        self.assertNotIn("--base master", check_workflow)
+
+        self.assertRegex(
+            check_workflow,
+            r"(?m)^on:\n  workflow_dispatch:\n\npermissions:",
+        )
+        self.assertNotIn("schedule:", check_workflow)
+        self.assertNotIn("cron:", check_workflow)
+        self.assertIn("contents: read", check_workflow)
+        self.assertNotIn("contents: write", check_workflow)
+        self.assertNotIn("OPENAI_API_KEY", check_workflow)
+        self.assertNotIn("OPENAI_MODEL", check_workflow)
+        self.assertNotIn("manual_sync.py update", check_workflow)
         self.assertIn("group: quad-cortex-manual-state", check_workflow)
         self.assertIn("group: quad-cortex-manual-state", release_workflow)
 
-    def test_failures_and_same_day_reruns_are_handled_safely(self) -> None:
+    def test_manual_check_is_read_only_diagnostics(self) -> None:
         workflow = (REPOSITORY / ".github" / "workflows" / "check-quad-cortex.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("steps.compare.outcome == 'failure'", workflow)
-        self.assertIn("Quad Cortex source comparison failed", workflow)
-        self.assertIn("gh label create update-detected", workflow)
-        self.assertIn("git diff --cached --quiet", workflow)
-        self.assertIn("skipping an empty commit", workflow)
+        self.assertIn("manual_sync.py check", workflow)
+        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
+        self.assertNotIn("manual_sync.py publish", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertNotIn("gh issue", workflow)
+        self.assertNotIn("gh pr", workflow)
 
     def test_release_binds_candidate_state_to_the_merged_pdf(self) -> None:
         workflow = (
@@ -257,12 +264,28 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("validate-repository", workflow)
         self.assertIn("contents: read", workflow)
 
-    def test_operational_documentation_records_the_external_watchdog(self) -> None:
+    def test_operational_documentation_assigns_scheduling_to_codex(self) -> None:
+        readme = (REPOSITORY / "README.md").read_text(encoding="utf-8")
         documentation = (REPOSITORY / "docs" / "AUTOMATION.md").read_text(encoding="utf-8")
-        self.assertIn("60 days", documentation)
-        self.assertIn("local Codex automation", documentation)
+
+        self.assertIn(
+            "local Codex automation is the **only automatic scheduler and source-change detector**",
+            readme,
+        )
+        self.assertIn("existing Codex plan", readme)
+        self.assertIn("does not use `OPENAI_API_KEY`", readme)
+        self.assertIn("has no schedule", readme)
+
+        self.assertIn(
+            "local Codex automation is the **only automatic scheduler and source-change detector**",
+            documentation,
+        )
+        self.assertIn("diagnostic backup only", documentation)
+        self.assertIn("exactly one trigger: `workflow_dispatch`", documentation)
+        self.assertIn("does **not** use `OPENAI_API_KEY`", documentation)
+        self.assertIn("separately billed translation API", documentation)
+        self.assertNotIn("60 days", documentation)
         self.assertIn("$env:PYTHONUTF8='1'", documentation)
-        self.assertIn("publicly downloadable", documentation)
         self.assertIn(
             "Human review and an explicit merge are mandatory", documentation
         )

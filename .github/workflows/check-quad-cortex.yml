@@ -1,20 +1,10 @@
 name: Check Quad Cortex manual
 
 on:
-  schedule:
-    - cron: "17 3 23 * *"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: Check and report only; do not translate or create a branch
-        required: false
-        type: boolean
-        default: false
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: quad-cortex-manual-state
@@ -29,7 +19,7 @@ env:
 
 jobs:
   check:
-    name: Compare, translate, and propose a safe update
+    name: Read-only comparison fallback
     runs-on: ubuntu-latest
     steps:
       - name: Check out the published repository
@@ -59,27 +49,10 @@ jobs:
       - name: Report missing bootstrap state
         if: steps.state.outcome == 'failure'
         run: |
-          gh label create update-detected \
-            --color D93F0B \
-            --description "The official manual changed or automation needs attention" \
-            --force
-          body="$RUNNER_TEMP/missing-state.md"
-          {
-            echo "The monthly Quad Cortex check could not start because the durable state asset is missing."
-            echo
-            echo "Expected release: \`$STATE_TAG\`"
-            echo "Expected asset: \`$STATE_ASSET\`"
-            echo
-            echo "Follow the bootstrap procedure in \`docs/AUTOMATION.md\`."
-            echo
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          } > "$body"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex automation in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body-file "$body"
-          else
-            gh issue create --title "[update-detected] Quad Cortex automation needs bootstrap state" --label update-detected --body-file "$body"
-          fi
+          echo "The read-only fallback could not start because the durable state asset is missing."
+          echo "Expected release: $STATE_TAG"
+          echo "Expected asset: $STATE_ASSET"
+          echo "Follow the bootstrap procedure in docs/AUTOMATION.md."
           exit 1
 
       - name: Compare canonical manual sections
@@ -98,21 +71,9 @@ jobs:
       - name: Report an upstream comparison failure
         if: steps.compare.outcome == 'failure'
         run: |
-          gh label create update-detected --color D93F0B --description "The official manual changed or automation needs attention" --force
-          body="$RUNNER_TEMP/compare-failed.md"
-          {
-            echo "The official Quad Cortex page could not be compared with the saved baseline. The published PDF and state were not changed."
-            echo
-            echo "This usually means that the website structure changed or the source was temporarily unavailable."
-            echo
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          } > "$body"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex manual in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body-file "$body"
-          else
-            gh issue create --title "[update-detected] Quad Cortex source comparison failed" --label update-detected --body-file "$body"
-          fi
+          echo "The official Quad Cortex page could not be compared with the saved baseline."
+          echo "The published PDF and state were not changed."
+          echo "This usually means that the website structure changed or the source was temporarily unavailable."
           exit 1
 
       - name: Write the check summary
@@ -130,208 +91,17 @@ jobs:
               f"- Changed stable units: **{len(report['changed_units'])}**",
               f"- Added units: **{len(report['added_units'])}**",
               f"- Removed units: **{len(report['removed_units'])}**",
+              "",
+              "This manually triggered workflow is read-only. The local Codex automation is the only scheduled detector and updater.",
           ]
           if report["reasons"]:
-              lines += ["", "### Publication blockers", ""] + [f"- {item}" for item in report["reasons"]]
+              lines += ["", "### Review notes", ""] + [f"- {item}" for item in report["reasons"]]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
               handle.write("\n".join(lines) + "\n")
           PY
 
-      - name: Stop safely when nothing changed
-        if: steps.compare.outputs.status == 'unchanged'
-        run: echo "No source change. No branch, commit, pull request, or release will be created."
-
-      - name: Create or update a blocked-change issue
-        if: steps.compare.outputs.status == 'blocked' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
+      - name: Confirm read-only completion
+        if: steps.compare.outcome == 'success'
         run: |
-          gh label create update-detected \
-            --color D93F0B \
-            --description "The official manual changed or automation needs attention" \
-            --force
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          report = json.loads(Path(os.environ["RUNNER_TEMP"] + "/quad-cortex/report.json").read_text(encoding="utf-8"))
-          lines = [
-              "The official Quad Cortex manual changed, but automatic publication was blocked to protect the PDF layout.",
-              "",
-              f"Official version: **{report['upstream_version']}**",
-              f"Changed units: **{len(report['changed_units'])}**",
-              "",
-              "Blockers:",
-          ] + [f"- {reason}" for reason in report["reasons"]] + [
-              "",
-              f"Run: {os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-          ]
-          Path(os.environ["RUNNER_TEMP"] + "/blocked.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex manual in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body-file "$RUNNER_TEMP/blocked.md"
-          else
-            gh issue create --title "[update-detected] Quad Cortex manual requires review" --label update-detected --body-file "$RUNNER_TEMP/blocked.md"
-          fi
-          exit 1
-
-      - name: Stop after a manual dry run
-        if: steps.compare.outputs.status == 'safe_change' && github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: echo "Dry run requested. The safe change was detected but no external state was changed."
-
-      - name: Set up the accepted Node.js PDF toolchain
-        if: steps.compare.outputs.status == 'safe_change' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
-        uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: .github/package-lock.json
-
-      - name: Install the pinned Playwright renderer
-        if: steps.compare.outputs.status == 'safe_change' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
-        run: |
-          npm ci --prefix .github
-          .github/node_modules/.bin/playwright install --with-deps chromium
-
-      - name: Translate changed fragments and validate the PDF
-        id: build
-        if: steps.compare.outputs.status == 'safe_change' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
-        continue-on-error: true
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
-        run: |
-          edition_date="$(date -u +%F)"
-          python .github/scripts/manual_sync.py update \
-            --config "$CONFIG" \
-            --state-archive "$RUNNER_TEMP/quad-cortex/input/$STATE_ASSET" \
-            --snapshot "$RUNNER_TEMP/quad-cortex/candidate.json" \
-            --report "$RUNNER_TEMP/quad-cortex/report.json" \
-            --work-directory "$RUNNER_TEMP/quad-cortex/update" \
-            --output-pdf "$RUNNER_TEMP/quad-cortex/updated.pdf" \
-            --output-state "$RUNNER_TEMP/quad-cortex/$STATE_ASSET" \
-            --edition-date "$edition_date" \
-            --result "$RUNNER_TEMP/quad-cortex/update-result.json"
-
-      - name: Preserve the candidate state until the pull request is merged
-        if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: quad-cortex-state-candidate-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/quad-cortex/quad-cortex-state-v1.zip
-            ${{ runner.temp }}/quad-cortex/report.json
-            ${{ runner.temp }}/quad-cortex/update-result.json
-          if-no-files-found: error
-          retention-days: 90
-
-      - name: Report translation or PDF validation failure
-        if: steps.build.outcome == 'failure'
-        run: |
-          gh label create update-detected --color D93F0B --description "The official manual changed or automation needs attention" --force
-          body="$RUNNER_TEMP/build-failed.md"
-          {
-            echo "A source update was detected, but translation, rendering, or PDF validation failed. The published PDF was not changed."
-            echo
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          } > "$body"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex manual in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body-file "$body"
-          else
-            gh issue create --title "[update-detected] Quad Cortex manual update failed validation" --label update-detected --body-file "$body"
-          fi
-          exit 1
-
-      - name: Create or refresh the dated update branch
-        id: branch
-        if: steps.build.outcome == 'success'
-        run: |
-          edition_date="$(python -c 'import json; print(json.load(open("'"$RUNNER_TEMP/quad-cortex/update-result.json"'", encoding="utf-8"))["edition_date"])')"
-          branch="update/quad-cortex/$edition_date"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            git fetch origin "$branch"
-            git switch -C "$branch" FETCH_HEAD
-          else
-            git switch -c "$branch"
-          fi
-          echo "name=$branch" >> "$GITHUB_OUTPUT"
-
-      - name: Replace the sole PDF and update the status table
-        if: steps.build.outcome == 'success'
-        run: |
-          python .github/scripts/manual_sync.py publish \
-            --config "$CONFIG" \
-            --update-result "$RUNNER_TEMP/quad-cortex/update-result.json" \
-            --repository "$GITHUB_WORKSPACE" \
-            --result "$RUNNER_TEMP/quad-cortex/publish-result.json"
-
-      - name: Commit only the public PDF and README
-        id: publication
-        if: steps.build.outcome == 'success'
-        run: |
-          unexpected="$(git status --porcelain | awk '{print $2}' | grep -Ev '^(README\.md|manuals/quad-cortex/[^/]+\.pdf)$' || true)"
-          if [[ -n "$unexpected" ]]; then
-            echo "Unexpected generated paths:" >&2
-            echo "$unexpected" >&2
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md manuals/quad-cortex/
-          staged="$(git diff --cached --name-only)"
-          if [[ -n "$staged" ]] && printf '%s\n' "$staged" | grep -Ev '^(README\.md|manuals/quad-cortex/[^/]+\.pdf)$'; then
-            echo "Refusing to commit files outside the publication allowlist." >&2
-            exit 1
-          fi
-          if git diff --cached --quiet; then
-            echo "The dated update branch already contains these exact public files; skipping an empty commit."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            version="$(python -c 'import json; print(json.load(open("'"$RUNNER_TEMP/quad-cortex/update-result.json"'", encoding="utf-8"))["upstream_version"])')"
-            git commit -m "Update Quad Cortex Russian manual to $version"
-            git push -u origin "${{ steps.branch.outputs.name }}"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Open or update the pull request and stale-content issue
-        if: steps.build.outcome == 'success'
-        env:
-          UPDATE_BRANCH: ${{ steps.branch.outputs.name }}
-        run: |
-          result="$RUNNER_TEMP/quad-cortex/update-result.json"
-          version="$(python -c 'import json; print(json.load(open("'"$result"'", encoding="utf-8"))["upstream_version"])')"
-          body="$RUNNER_TEMP/pr-body.md"
-          {
-            echo "## Automated Quad Cortex manual update"
-            echo
-            echo "- Official version: **$version**"
-            echo "- Only changed source fragments were sent for translation."
-            echo "- The generated PDF passed page, blank-page, image, table-of-contents link, and repository-content checks."
-            echo "- Merging this pull request publishes a dated GitHub Release and promotes its external state archive."
-            echo "- Human review and an explicit merge are mandatory before publication."
-            echo
-            echo "Source: https://neuraldsp.com/manual/quad-cortex#Global-Features"
-            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo
-            echo "<!-- state-run-id: $GITHUB_RUN_ID -->"
-          } > "$body"
-          pr="$(gh pr list --state open --head "$UPDATE_BRANCH" --json number --jq '.[0].number // empty')"
-          if [[ -n "$pr" ]]; then
-            gh pr edit "$pr" --title "Update Quad Cortex Russian manual to $version" --body-file "$body"
-          else
-            pr_url="$(gh pr create --draft --base main --head "$UPDATE_BRANCH" --title "Update Quad Cortex Russian manual to $version" --body-file "$body")"
-            pr="${pr_url##*/}"
-          fi
-          gh label create update-detected --color D93F0B --description "The official manual changed or automation needs attention" --force
-          issue_body="$RUNNER_TEMP/pending.md"
-          {
-            echo "The official Quad Cortex manual has changed. Until pull request #$pr is merged, the PDF on \`main\` is outdated."
-            echo
-            echo "Pull request: #$pr"
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          } > "$issue_body"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex manual in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body-file "$issue_body"
-          else
-            gh issue create --title "[update-detected] Quad Cortex manual update is pending" --label update-detected --body-file "$issue_body"
-          fi
+          echo "Comparison result: ${{ steps.compare.outputs.status }}"
+          echo "No translation API, issue, branch, commit, pull request, release, PDF, or durable state was changed."
