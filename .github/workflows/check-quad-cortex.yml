@@ -33,12 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the published repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -179,7 +179,7 @@ jobs:
 
       - name: Set up the accepted Node.js PDF toolchain
         if: steps.compare.outputs.status == 'safe_change' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -213,7 +213,7 @@ jobs:
 
       - name: Preserve the candidate state until the pull request is merged
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quad-cortex-state-candidate-${{ github.run_id }}
           path: |
