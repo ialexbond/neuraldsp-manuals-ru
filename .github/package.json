@@ -1,0 +1,10 @@
+{
+  "name": "neuraldsp-manuals-ru-automation",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned PDF renderer for the Quad Cortex localization workflow",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "playwright": "1.61.1"
+  }
+}

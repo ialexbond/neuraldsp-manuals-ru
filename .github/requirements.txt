@@ -1,0 +1,4 @@
+beautifulsoup4==4.14.2
+fonttools==4.60.2
+PyMuPDF==1.26.3
+requests==2.33.0

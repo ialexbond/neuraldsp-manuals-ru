@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "slug": "quad-cortex",
+  "display_name": "Quad Cortex",
+  "source_url": "https://neuraldsp.com/manual/quad-cortex#Global-Features",
+  "expected_chapter_count": 12,
+  "minimum_section_count": 60,
+  "state_release_tag": "automation-state-quad-cortex-v1",
+  "state_asset_name": "quad-cortex-state-v1.zip",
+  "pdf_directory": "manuals/quad-cortex",
+  "pdf_name_template": "Quad_Cortex_User_Manual_RU_v{version}_rev{date}.pdf",
+  "release_tag_template": "quad-cortex-v{version}-ru.{date}",
+  "maximum_changed_unit_ratio": 0.2,
+  "maximum_changed_unit_count": 15,
+  "minimum_pdf_pages": 100,
+  "maximum_pdf_page_delta_ratio": 0.12,
+  "minimum_internal_link_count": 70,
+  "playwright_version": "1.61.1"
+}
