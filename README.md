@@ -9,10 +9,10 @@
 ## Доступные руководства
 
 <!-- MANUAL_STATUS:START -->
-| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Скачать |
+| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Релиз |
 | --- | --- | --- | --- | --- | --- |
-| Устройство | Nano Cortex | [2.2.0](https://neuraldsp.com/manual/nano-cortex) | 25.07.2026 | Опубликовано | [Скачать PDF](manuals/nano-cortex/Nano_Cortex_User_Manual_RU_v2.2.0_rev2026-07-25.pdf?raw=1) |
-| Устройство | Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex) | 23.07.2026 | Опубликовано | [Скачать PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf?raw=1) |
+| Устройство | Nano Cortex | [2.2.0](https://neuraldsp.com/manual/nano-cortex) | 25.07.2026 | Опубликовано | [Открыть релиз](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/nano-cortex-v2.2.0-ru.2026-07-25) |
+| Устройство | Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex) | 23.07.2026 | Опубликовано | [Открыть релиз](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/quad-cortex-v4.0.0-ru.2026-07-23) |
 <!-- MANUAL_STATUS:END -->
 
 Все опубликованные редакции также доступны на [странице релизов](https://github.com/ialexbond/neuraldsp-manuals-ru/releases).

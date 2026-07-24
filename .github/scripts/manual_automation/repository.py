@@ -10,6 +10,9 @@ from typing import Any
 
 STATUS_START = "<!-- MANUAL_STATUS:START -->"
 STATUS_END = "<!-- MANUAL_STATUS:END -->"
+PUBLIC_RELEASES_URL = (
+    "https://github.com/ialexbond/neuraldsp-manuals-ru/releases"
+)
 
 
 class RepositoryPolicyError(RuntimeError):
@@ -105,6 +108,10 @@ def manual_catalog(repository: Path) -> list[dict[str, str]]:
             )
         version, edition_date = parse_pdf_name(config, pdf_files[0].name)
         year, month, day = edition_date.split("-")
+        release_tag = config["release_tag_template"].format(
+            version=version,
+            date=edition_date,
+        )
         rows.append(
             {
                 "category": config["category"],
@@ -113,6 +120,7 @@ def manual_catalog(repository: Path) -> list[dict[str, str]]:
                 "edition_date": f"{day}.{month}.{year}",
                 "source_url": config["source_url"],
                 "pdf_path": pdf_files[0].relative_to(repository).as_posix(),
+                "release_url": f"{PUBLIC_RELEASES_URL}/tag/{release_tag}",
             }
         )
     return sorted(rows, key=lambda item: item["display_name"].casefold())
@@ -136,14 +144,14 @@ def update_readme(
         raise RepositoryPolicyError("The manual catalog cannot be empty.")
     lines = [
         STATUS_START,
-        "| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Скачать |",
+        "| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Релиз |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for row in sorted(rows, key=lambda item: item["display_name"].casefold()):
         lines.append(
             f"| {row['category']} | {row['display_name']} | "
             f"[{row['version']}]({row['source_url']}) | {row['edition_date']} | "
-            f"Опубликовано | [Скачать PDF]({row['pdf_path']}?raw=1) |"
+            f"Опубликовано | [Открыть релиз]({row['release_url']}) |"
         )
     lines.append(STATUS_END)
     block = "\n".join(lines)

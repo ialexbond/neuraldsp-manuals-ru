@@ -596,9 +596,9 @@ class RepositoryPolicyTests(unittest.TestCase):
                         "display_name": "Quad Cortex",
                         "version": "4.1.0",
                         "edition_date": "23.08.2026",
-                        "pdf_path": (
-                            "manuals/quad-cortex/"
-                            "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
+                        "release_url": (
+                            "https://github.com/ialexbond/neuraldsp-manuals-ru/"
+                            "releases/tag/quad-cortex-v4.1.0-ru.2026-08-23"
                         ),
                         "source_url": "https://example.test/manual",
                     },
@@ -607,7 +607,10 @@ class RepositoryPolicyTests(unittest.TestCase):
                         "display_name": "Example Plugin",
                         "version": "1.2.0",
                         "edition_date": "24.08.2026",
-                        "pdf_path": "manuals/example-plugin/Example_Plugin_RU_v1.2.0_rev2026-08-24.pdf",
+                        "release_url": (
+                            "https://github.com/ialexbond/neuraldsp-manuals-ru/"
+                            "releases/tag/example-plugin-v1.2.0-ru.2026-08-24"
+                        ),
                         "source_url": "https://example.test/plugin",
                     },
                 ],
@@ -619,11 +622,12 @@ class RepositoryPolicyTests(unittest.TestCase):
             self.assertIn("Опубликовано", content)
             self.assertIn("| Устройство | Quad Cortex |", content)
             self.assertIn("| Плагин | Example Plugin |", content)
-            self.assertIn("[Скачать PDF]", content)
+            self.assertIn("[Открыть релиз]", content)
             self.assertIn(
-                "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf?raw=1",
+                "releases/tag/quad-cortex-v4.1.0-ru.2026-08-23",
                 content,
             )
+            self.assertNotIn("?raw=1", content)
             self.assertNotIn("\nold\n", content)
             self.assertTrue(content.startswith("before\n"))
             self.assertTrue(content.endswith("\nafter\n"))
@@ -646,9 +650,10 @@ class RepositoryPolicyTests(unittest.TestCase):
                             "display_name": "Quad Cortex",
                             "version": "4.1.0",
                             "edition_date": "23.08.2026",
-                            "pdf_path": (
-                                "manuals/quad-cortex/"
-                                "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
+                            "release_url": (
+                                "https://github.com/ialexbond/"
+                                "neuraldsp-manuals-ru/releases/tag/"
+                                "quad-cortex-v4.1.0-ru.2026-08-23"
                             ),
                             "source_url": "https://example.test/manual",
                         }
@@ -668,6 +673,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                     "source_url": "https://example.test/quad-cortex",
                     "pdf_directory": "manuals/quad-cortex",
                     "pdf_name_template": "Quad_Cortex_RU_v{version}_rev{date}.pdf",
+                    "release_tag_template": "quad-cortex-v{version}-ru.{date}",
                     "filename": "Quad_Cortex_RU_v4.0.0_rev2026-07-23.pdf",
                 },
                 {
@@ -677,6 +683,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                     "source_url": "https://example.test/plugin",
                     "pdf_directory": "manuals/example-plugin",
                     "pdf_name_template": "Example_Plugin_RU_v{version}_rev{date}.pdf",
+                    "release_tag_template": "example-plugin-v{version}-ru.{date}",
                     "filename": "Example_Plugin_RU_v1.2.0_rev2026-08-24.pdf",
                 },
             ]
@@ -699,6 +706,20 @@ class RepositoryPolicyTests(unittest.TestCase):
             )
             self.assertEqual("24.08.2026", rows[0]["edition_date"])
             self.assertEqual("23.07.2026", rows[1]["edition_date"])
+            self.assertEqual(
+                (
+                    "https://github.com/ialexbond/neuraldsp-manuals-ru/"
+                    "releases/tag/example-plugin-v1.2.0-ru.2026-08-24"
+                ),
+                rows[0]["release_url"],
+            )
+            self.assertEqual(
+                (
+                    "https://github.com/ialexbond/neuraldsp-manuals-ru/"
+                    "releases/tag/quad-cortex-v4.0.0-ru.2026-07-23"
+                ),
+                rows[1]["release_url"],
+            )
 
     def test_repository_readme_keeps_search_content_and_update_markers(self) -> None:
         content = (REPOSITORY / "README.md").read_text(encoding="utf-8")
@@ -712,6 +733,21 @@ class RepositoryPolicyTests(unittest.TestCase):
         self.assertIn("устройств, плагинов и программ Neural DSP", content)
         self.assertIn("| Устройство | Quad Cortex |", content)
         self.assertIn("неофициальные русские переводы", content)
+        self.assertIn(
+            (
+                "releases/tag/"
+                "nano-cortex-v2.2.0-ru.2026-07-25"
+            ),
+            content,
+        )
+        self.assertIn(
+            (
+                "releases/tag/"
+                "quad-cortex-v4.0.0-ru.2026-07-23"
+            ),
+            content,
+        )
+        self.assertNotIn("?raw=1", content)
 
     def test_manual_directory_rejects_non_pdf_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
