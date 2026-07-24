@@ -229,12 +229,20 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           notes="$RUNNER_TEMP/release-notes.md"
+          asset_name="$(basename "$PDF_PATH")"
+          formatted_date="$(date -d "$EDITION_DATE" '+%d.%m.%Y')"
+          pdf_sha256="$(sha256sum "$PDF_PATH" | cut -d ' ' -f 1)"
+          download_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$asset_name"
           {
             echo "Полное руководство пользователя Neural DSP $DISPLAY_NAME $VERSION на русском языке в формате PDF."
             echo
-            echo "Дата редакции: $EDITION_DATE"
-            echo "Официальный источник: $SOURCE_URL"
-            echo "Запрос на слияние: #${{ github.event.pull_request.number }}"
+            echo "[Скачать инструкцию $DISPLAY_NAME $VERSION на русском (PDF)]($download_url)"
+            echo
+            echo "- Русская редакция: $formatted_date"
+            echo "- Официальный источник: $SOURCE_URL"
+            printf -- '- SHA-256 PDF: `%s`\n' "$pdf_sha256"
+            echo
+            echo "Это независимая неофициальная русская локализация. В документе сохранены иллюстрации, кликабельное оглавление, закладки, встроенные шрифты и доступный для поиска русский текст."
           } > "$notes"
           title="$DISPLAY_NAME $VERSION — инструкция на русском языке (PDF)"
           if gh release view "$TAG" >/dev/null 2>&1; then
