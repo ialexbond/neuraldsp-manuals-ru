@@ -379,52 +379,23 @@ class RepositoryPolicyTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_check_workflow_is_manual_only_and_read_only(self) -> None:
-        check_workflow = (REPOSITORY / ".github" / "workflows" / "check-quad-cortex.yml").read_text(
-            encoding="utf-8"
-        )
-        release_workflow = (
-            REPOSITORY / ".github" / "workflows" / "release-quad-cortex.yml"
-        ).read_text(encoding="utf-8")
-
-        self.assertRegex(
-            check_workflow,
-            r"(?m)^on:\n  workflow_dispatch:\n\npermissions:",
-        )
-        self.assertNotIn("schedule:", check_workflow)
-        self.assertNotIn("cron:", check_workflow)
-        self.assertIn("contents: read", check_workflow)
-        self.assertNotIn("contents: write", check_workflow)
-        self.assertNotIn("manual_sync.py update", check_workflow)
-        self.assertIn("group: quad-cortex-manual-state", check_workflow)
-        self.assertIn("group: quad-cortex-manual-state", release_workflow)
-
-    def test_manual_check_is_read_only_diagnostics(self) -> None:
-        workflow = (REPOSITORY / ".github" / "workflows" / "check-quad-cortex.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("manual_sync.py check", workflow)
-        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
-        self.assertNotIn("manual_sync.py publish", workflow)
-        self.assertNotIn("git commit", workflow)
-        self.assertNotIn("git push", workflow)
-        self.assertNotIn("gh issue", workflow)
-        self.assertNotIn("gh pr", workflow)
-
-    def test_release_binds_candidate_state_to_the_merged_pdf(self) -> None:
+    def test_release_publishes_only_the_verified_pdf(self) -> None:
         workflow = (
             REPOSITORY / ".github" / "workflows" / "release-quad-cortex.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn("validate-state-pdf", workflow)
-        self.assertIn('--state-archive "$RUNNER_TEMP/state-candidate/$STATE_ASSET"', workflow)
-        self.assertIn('--edition-date "$EDITION_DATE"', workflow)
-        self.assertIn("steps.state_pdf.outcome == 'success'", workflow)
+
+        self.assertIn("validate-repository", workflow)
         self.assertIn("startsWith(github.event.pull_request.head.ref, 'update/quad-cortex/')", workflow)
-        self.assertNotIn("mode=bootstrap", workflow)
+        self.assertIn(r"update/quad-cortex/(\d{4}-\d{2}-\d{2})$", workflow)
         self.assertIn("инструкция на русском языке (PDF)", workflow)
         self.assertIn(
             "Полное руководство пользователя Neural DSP Quad Cortex", workflow
         )
+        self.assertNotIn("automation-state", workflow)
+        self.assertNotIn("STATE_TAG", workflow)
+        self.assertNotIn("STATE_ASSET", workflow)
+        self.assertNotIn("validate-state-pdf", workflow)
+        self.assertNotIn("gh run download", workflow)
 
     def test_pull_requests_have_a_required_validation_workflow(self) -> None:
         workflow = (
