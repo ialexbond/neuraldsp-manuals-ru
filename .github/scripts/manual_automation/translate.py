@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import mimetypes
-import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -52,44 +50,6 @@ def _resolve_path(root: Tag, path_text: str) -> Tag | NavigableString:
     return current
 
 
-def _extract_output_text(response: dict[str, Any]) -> str:
-    if isinstance(response.get("output_text"), str):
-        return response["output_text"]
-    chunks: list[str] = []
-    for output in response.get("output", []):
-        for content in output.get("content", []):
-            if isinstance(content.get("text"), str):
-                chunks.append(content["text"])
-    return "".join(chunks)
-
-
-def _parse_json_response(text: str) -> dict[str, str]:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
-        text = re.sub(r"\s*```$", "", text)
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise TranslationError(
-            "The translation model did not return valid JSON."
-        ) from exc
-    rows = value.get("translations") if isinstance(value, dict) else None
-    if not isinstance(rows, list):
-        raise TranslationError("The translation response has no translations array.")
-    result: dict[str, str] = {}
-    for row in rows:
-        if not isinstance(row, dict) or not isinstance(row.get("id"), str):
-            raise TranslationError("The translation response contains an invalid item.")
-        translated = row.get("translation")
-        if not isinstance(translated, str) or not normalize_text(translated):
-            raise TranslationError(f"Translation {row['id']} is empty or invalid.")
-        if row["id"] in result:
-            raise TranslationError(f"Translation id is duplicated: {row['id']}")
-        result[row["id"]] = translated
-    return result
-
-
 def _plain_text(value: str) -> str:
     return normalize_text(BeautifulSoup(value, "html.parser").get_text(" "))
 
@@ -97,10 +57,20 @@ def _plain_text(value: str) -> str:
 def _validate_translated_items(
     items: list[dict[str, str]], translated: dict[str, str]
 ) -> None:
+    expected = {item["id"] for item in items}
+    actual = set(translated)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise TranslationError(
+            f"Translation ids do not match. Missing={missing}; extra={extra}"
+        )
     for item in items:
         item_id = item["id"]
         source_text = _plain_text(item["source"])
         translated_value = translated[item_id]
+        if not isinstance(translated_value, str) or not normalize_text(translated_value):
+            raise TranslationError(f"Translation {item_id} is empty or invalid.")
         translated_text = _plain_text(translated_value)
         source_numbers = Counter(re.findall(r"\d+", source_text))
         translated_numbers = Counter(re.findall(r"\d+", translated_text))
@@ -126,61 +96,6 @@ def _validate_translated_items(
             raise TranslationError(
                 f"Translation {item_id} introduced unexpected HTML markup."
             )
-
-
-def translate_items(
-    items: list[dict[str, str]],
-    *,
-    section_title: str,
-    api_key: str,
-    model: str,
-    endpoint: str = "https://api.openai.com/v1/responses",
-) -> dict[str, str]:
-    if not items:
-        return {}
-    if not api_key:
-        raise TranslationError("OPENAI_API_KEY is required for a changed manual.")
-    instructions = (
-        "You are localizing an official Neural DSP Quad Cortex user manual into natural, "
-        "technically accurate Russian. Translate only the supplied changed fragments. Fragments "
-        "may contain inline HTML. Use previous_translation as the markup template and preserve "
-        "every one of its HTML tags and attributes while updating its Russian text. "
-        "Use the surrounding section and previous Russian wording as context. Preserve product "
-        "names, UI labels written in uppercase, MIDI notation, units, numbers, email addresses, "
-        "and URLs. Prefer established Russian music-equipment terminology over literal wording. "
-        "Do not add explanations. Return strict JSON with the shape "
-        '{"translations":[{"id":"...","translation":"..."}]} and every input id exactly once.'
-    )
-    payload = {
-        "model": model,
-        "instructions": instructions,
-        "input": json.dumps(
-            {"section": section_title, "fragments": items}, ensure_ascii=False
-        ),
-    }
-    response = requests.post(
-        endpoint,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=180,
-    )
-    if response.status_code >= 400:
-        raise TranslationError(
-            f"OpenAI API returned HTTP {response.status_code}: {response.text[:500]}"
-        )
-    translated = _parse_json_response(_extract_output_text(response.json()))
-    expected = {item["id"] for item in items}
-    if set(translated) != expected:
-        missing = sorted(expected - set(translated))
-        extra = sorted(set(translated) - expected)
-        raise TranslationError(
-            f"Translation ids do not match. Missing={missing}; extra={extra}"
-        )
-    _validate_translated_items(items, translated)
-    return translated
 
 
 def _localized_unit_element(document: BeautifulSoup, unit: dict[str, Any]) -> Tag:
@@ -348,9 +263,7 @@ def apply_safe_update(
     changed_keys: list[str],
     document_path: Path,
     asset_directory: Path,
-    api_key: str | None = None,
-    model: str | None = None,
-    translator=None,
+    translations_by_unit: dict[str, dict[str, str]],
     edition_date: str,
 ) -> dict[str, Any]:
     document = BeautifulSoup(document_path.read_text(encoding="utf-8"), "html.parser")
@@ -460,15 +373,12 @@ def apply_safe_update(
                 )
                 item_paths[item_id] = ("alt", new_attribute["path"])
 
-        if translator is None:
-            translated = translate_items(
-                items,
-                section_title=candidate["title"],
-                api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),
-                model=model or os.environ.get("OPENAI_MODEL", "gpt-5-mini"),
-            )
-        else:
-            translated = translator(items, candidate["title"])
+        translated = translations_by_unit.get(key)
+        if translated is None:
+            raise TranslationError(f"Translations are missing for changed unit {key}")
+        if not isinstance(translated, dict):
+            raise TranslationError(f"Translations for {key} must be an object.")
+        _validate_translated_items(items, translated)
         translation_count += len(items)
 
         for item_id, value in translated.items():

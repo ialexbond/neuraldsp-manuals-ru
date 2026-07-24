@@ -7,7 +7,7 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
@@ -73,29 +73,6 @@ def _semantic_children(node: Tag) -> list[Tag | NavigableString]:
         if isinstance(child, Tag) and child.name not in IGNORED_TAGS:
             children.append(child)
     return children
-
-
-def iter_semantic_nodes(
-    root: Tag,
-) -> Iterator[tuple[tuple[int, ...], Tag | NavigableString]]:
-    def visit(node: Tag, path: tuple[int, ...]) -> Iterator[tuple[tuple[int, ...], Tag | NavigableString]]:
-        yield path, node
-        for index, child in enumerate(_semantic_children(node)):
-            child_path = path + (index,)
-            yield child_path, child
-            if isinstance(child, Tag):
-                yield from visit_children(child, child_path)
-
-    def visit_children(
-        node: Tag, path: tuple[int, ...]
-    ) -> Iterator[tuple[tuple[int, ...], Tag | NavigableString]]:
-        for index, child in enumerate(_semantic_children(node)):
-            child_path = path + (index,)
-            yield child_path, child
-            if isinstance(child, Tag):
-                yield from visit_children(child, child_path)
-
-    yield from visit(root, ())
 
 
 def semantic_payload(element: Tag, base_url: str) -> dict[str, Any]:

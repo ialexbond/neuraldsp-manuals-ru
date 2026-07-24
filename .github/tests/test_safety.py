@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -12,7 +13,7 @@ REPOSITORY = Path(__file__).resolve().parents[2]
 SCRIPTS = REPOSITORY / ".github" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from manual_automation.cli import _clean_work_directory  # noqa: E402
+from manual_automation.cli import _clean_work_directory, _translations  # noqa: E402
 from manual_automation.translate import (  # noqa: E402
     TranslationError,
     _replace_inner_html,
@@ -59,6 +60,41 @@ class TranslationSafetyTests(unittest.TestCase):
                 "<strong>значение</strong> перед текстом.",
                 "До <strong>значения</strong>.",
             )
+
+
+class TranslationInputTests(unittest.TestCase):
+    def test_translation_file_must_match_changed_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "translations.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "units": {
+                            "section:Global-Features": {
+                                "text:0": "Обновлённый перевод."
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            translations = _translations(
+                str(path), ["section:Global-Features"]
+            )
+
+            self.assertEqual(
+                "Обновлённый перевод.",
+                translations["section:Global-Features"]["text:0"],
+            )
+
+    def test_translation_file_rejects_missing_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "translations.json"
+            path.write_text(json.dumps({"units": {}}), encoding="utf-8")
+
+            with self.assertRaises(RuntimeError):
+                _translations(str(path), ["section:Global-Features"])
 
 
 class WorkDirectorySafetyTests(unittest.TestCase):
