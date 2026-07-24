@@ -8,11 +8,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: validate-quad-cortex-pr-${{ github.event.pull_request.number }}
+  group: validate-manuals-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 env:
-  CONFIG: .github/manuals/quad-cortex.json
   PYTHONUTF8: "1"
 
 jobs:
@@ -38,7 +37,10 @@ jobs:
 
       - name: Проверить правила публичного репозитория
         run: |
-          python .github/scripts/manual_sync.py validate-repository \
-            --config "$CONFIG" \
-            --repository "$GITHUB_WORKSPACE" \
-            --result "$RUNNER_TEMP/repository-validation.json"
+          for config in .github/manuals/*.json; do
+            slug="$(basename "$config" .json)"
+            python .github/scripts/manual_sync.py validate-repository \
+              --config "$config" \
+              --repository "$GITHUB_WORKSPACE" \
+              --result "$RUNNER_TEMP/$slug-validation.json"
+          done

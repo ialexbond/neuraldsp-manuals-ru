@@ -29,8 +29,7 @@ jobs:
     name: Публикация руководства
     if: >-
       github.event.pull_request.merged == true &&
-      (startsWith(github.event.pull_request.head.ref, 'update/quad-cortex/') ||
-      github.event.pull_request.head.ref == 'codex/bootstrap-quad-cortex-automation')
+      startsWith(github.event.pull_request.head.ref, 'update/quad-cortex/')
     runs-on: ubuntu-latest
     steps:
       - name: Получить объединённую версию репозитория
@@ -65,23 +64,12 @@ jobs:
           import os, re
           body = os.environ.get("PR_BODY", "")
           branch = os.environ["HEAD_BRANCH"]
-          if branch == "codex/bootstrap-quad-cortex-automation":
-              pdfs = list(__import__("pathlib").Path("manuals/quad-cortex").glob("*.pdf"))
-              if len(pdfs) != 1:
-                  raise SystemExit("Для первоначального выпуска требуется ровно один публичный PDF")
-              date = re.search(r"_rev(\d{4}-\d{2}-\d{2})\.pdf$", pdfs[0].name)
-              if not date:
-                  raise SystemExit("В имени первоначального PDF отсутствует дата редакции")
-              print("mode=bootstrap")
-              print(f"edition_date={date.group(1)}")
-          else:
-              run = re.search(r"<!-- state-run-id: (\d+) -->", body)
-              date = re.search(r"update/quad-cortex/(\d{4}-\d{2}-\d{2})$", branch)
-              if not run or not date:
-                  raise SystemExit("В запросе на слияние отсутствует отметка состояния автоматизации или дата в имени ветки")
-              print("mode=update")
-              print(f"run_id={run.group(1)}")
-              print(f"edition_date={date.group(1)}")
+          run = re.search(r"<!-- state-run-id: (\d+) -->", body)
+          date = re.search(r"update/quad-cortex/(\d{4}-\d{2}-\d{2})$", branch)
+          if not run or not date:
+              raise SystemExit("В запросе на слияние отсутствует отметка состояния автоматизации или дата в имени ветки")
+          print(f"run_id={run.group(1)}")
+          print(f"edition_date={date.group(1)}")
           PY
 
       - name: Скачать состояние, подготовленное вместе с PDF
@@ -89,15 +77,9 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/state-candidate"
-          if [[ "${{ steps.metadata.outputs.mode }}" == "bootstrap" ]]; then
-            gh release download "$STATE_TAG" \
-              --pattern "$STATE_ASSET" \
-              --dir "$RUNNER_TEMP/state-candidate"
-          else
-            gh run download "${{ steps.metadata.outputs.run_id }}" \
-              --name "quad-cortex-state-candidate-${{ steps.metadata.outputs.run_id }}" \
-              --dir "$RUNNER_TEMP/state-candidate"
-          fi
+          gh run download "${{ steps.metadata.outputs.run_id }}" \
+            --name "quad-cortex-state-candidate-${{ steps.metadata.outputs.run_id }}" \
+            --dir "$RUNNER_TEMP/state-candidate"
           test -f "$RUNNER_TEMP/state-candidate/$STATE_ASSET"
 
       - name: Сообщить о недоступности подготовленного состояния
@@ -142,7 +124,7 @@ jobs:
           exit 1
 
       - name: Сохранить новое состояние автоматизации
-        if: steps.state_pdf.outcome == 'success' && steps.metadata.outputs.mode == 'update'
+        if: steps.state_pdf.outcome == 'success'
         run: |
           if gh release view "$STATE_TAG" >/dev/null 2>&1; then
             gh release upload "$STATE_TAG" "$RUNNER_TEMP/state-candidate/$STATE_ASSET" --clobber

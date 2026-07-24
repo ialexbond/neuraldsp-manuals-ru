@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import tempfile
@@ -21,6 +22,22 @@ def expected_pdf_name(config: dict[str, Any], version: str, edition_date: str) -
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", edition_date):
         raise RepositoryPolicyError(f"Invalid Russian edition date: {edition_date}")
     return config["pdf_name_template"].format(version=version, date=edition_date)
+
+
+def parse_pdf_name(config: dict[str, Any], filename: str) -> tuple[str, str]:
+    pattern = re.escape(config["pdf_name_template"])
+    pattern = pattern.replace(
+        re.escape("{version}"), r"(?P<version>\d+\.\d+\.\d+)"
+    )
+    pattern = pattern.replace(
+        re.escape("{date}"), r"(?P<date>\d{4}-\d{2}-\d{2})"
+    )
+    match = re.fullmatch(pattern, filename)
+    if not match:
+        raise RepositoryPolicyError(
+            f"Published PDF filename does not match the configured format: {filename}"
+        )
+    return match.group("version"), match.group("date")
 
 
 def replace_manual_pdf(
@@ -72,13 +89,39 @@ def validate_manual_directory(
     }
 
 
+def manual_catalog(repository: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    config_directory = repository / ".github" / "manuals"
+    for config_path in sorted(config_directory.glob("*.json")):
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        pdf_directory = repository / config["pdf_directory"]
+        pdf_files = sorted(pdf_directory.glob("*.pdf"))
+        if not pdf_files:
+            continue
+        if len(pdf_files) != 1:
+            raise RepositoryPolicyError(
+                f"Expected one published PDF for {config['display_name']}, "
+                f"found {len(pdf_files)}."
+            )
+        version, edition_date = parse_pdf_name(config, pdf_files[0].name)
+        year, month, day = edition_date.split("-")
+        rows.append(
+            {
+                "category": config["category"],
+                "display_name": config["display_name"],
+                "version": version,
+                "edition_date": f"{day}.{month}.{year}",
+                "source_url": config["source_url"],
+                "pdf_path": pdf_files[0].relative_to(repository).as_posix(),
+            }
+        )
+    return sorted(rows, key=lambda item: item["display_name"].casefold())
+
+
 def update_readme(
     readme_path: Path,
     *,
-    version: str,
-    edition_date: str,
-    pdf_path: str,
-    source_url: str,
+    rows: list[dict[str, str]],
 ) -> None:
     content = readme_path.read_text(encoding="utf-8")
     if content.count(STATUS_START) != 1 or content.count(STATUS_END) != 1:
@@ -89,24 +132,21 @@ def update_readme(
         raise RepositoryPolicyError(
             "Служебные маркеры таблицы статуса в README расположены в неверном порядке."
         )
-    block = "\n".join(
-        [
-            STATUS_START,
-            (
-                f"**[Скачать руководство пользователя Neural DSP Quad Cortex {version} "
-                f"на русском языке (PDF)]({pdf_path}?raw=1)**"
-            ),
-            "",
-            "| Продукт | Оригинал | Русская редакция | Статус | Скачать |",
-            "| --- | --- | --- | --- | --- |",
-            (
-                f"| Quad Cortex | [{version}]({source_url}) | {edition_date} | "
-                f"Актуально, автоматические проверки пройдены | "
-                f"[Скачать PDF]({pdf_path}?raw=1) |"
-            ),
-            STATUS_END,
-        ]
-    )
+    if not rows:
+        raise RepositoryPolicyError("The manual catalog cannot be empty.")
+    lines = [
+        STATUS_START,
+        "| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Скачать |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in sorted(rows, key=lambda item: item["display_name"].casefold()):
+        lines.append(
+            f"| {row['category']} | {row['display_name']} | "
+            f"[{row['version']}]({row['source_url']}) | {row['edition_date']} | "
+            f"Опубликовано | [Скачать PDF]({row['pdf_path']}?raw=1) |"
+        )
+    lines.append(STATUS_END)
+    block = "\n".join(lines)
     pattern = re.compile(
         re.escape(STATUS_START) + r".*?" + re.escape(STATUS_END), re.DOTALL
     )

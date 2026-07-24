@@ -61,9 +61,10 @@ function startStaticServer() {
 async function main() {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   const server = await startStaticServer();
-  const browser = await chromium.launch({ headless: true });
+  let browser;
   const browserErrors = [];
   try {
+    browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text());
@@ -123,7 +124,7 @@ async function main() {
       playwrightVersion: packageMetadata.version,
     }));
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
     await new Promise((resolve) => server.close(resolve));
   }
 }

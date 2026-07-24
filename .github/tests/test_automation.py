@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -24,6 +25,8 @@ from manual_automation.pdf import (  # noqa: E402
 from manual_automation.repository import (  # noqa: E402
     RepositoryPolicyError,
     expected_pdf_name,
+    manual_catalog,
+    parse_pdf_name,
     update_readme,
     validate_manual_directory,
 )
@@ -185,9 +188,6 @@ class TranslationMergeTests(unittest.TestCase):
         <div id="Dimensions"><h3>Размеры устройства</h3><p>Ширина — <strong>29 см</strong>.</p></div>
         </body></html>"""
 
-        def fake_translator(items, _title):
-            return {item["id"]: "Более мощный процессор." for item in items}
-
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             document = root / "document.html"
@@ -201,7 +201,11 @@ class TranslationMergeTests(unittest.TestCase):
                 changed_keys=["section:Global-Features"],
                 document_path=document,
                 asset_directory=assets,
-                translator=fake_translator,
+                translations_by_unit={
+                    "section:Global-Features": {
+                        "text:0": "Более мощный процессор."
+                    }
+                },
                 edition_date="2026-08-23",
             )
             output = document.read_text(encoding="utf-8")
@@ -218,6 +222,13 @@ class RepositoryPolicyTests(unittest.TestCase):
             "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf",
             expected_pdf_name(config, "4.1.0", "2026-08-23"),
         )
+        self.assertEqual(
+            ("4.1.0", "2026-08-23"),
+            parse_pdf_name(
+                config,
+                "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf",
+            ),
+        )
 
     def test_readme_status_block_is_updated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -228,21 +239,35 @@ class RepositoryPolicyTests(unittest.TestCase):
             )
             update_readme(
                 path,
-                version="4.1.0",
-                edition_date="2026-08-23",
-                pdf_path="manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf",
-                source_url="https://example.test/manual",
+                rows=[
+                    {
+                        "category": "Устройство",
+                        "display_name": "Quad Cortex",
+                        "version": "4.1.0",
+                        "edition_date": "23.08.2026",
+                        "pdf_path": (
+                            "manuals/quad-cortex/"
+                            "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
+                        ),
+                        "source_url": "https://example.test/manual",
+                    },
+                    {
+                        "category": "Плагин",
+                        "display_name": "Example Plugin",
+                        "version": "1.2.0",
+                        "edition_date": "24.08.2026",
+                        "pdf_path": "manuals/example-plugin/Example_Plugin_RU_v1.2.0_rev2026-08-24.pdf",
+                        "source_url": "https://example.test/plugin",
+                    },
+                ],
             )
             content = path.read_text(encoding="utf-8")
             self.assertIn("4.1.0", content)
-            self.assertIn("2026-08-23", content)
+            self.assertIn("23.08.2026", content)
             self.assertIn("Русская редакция", content)
-            self.assertIn("Актуально, автоматические проверки пройдены", content)
-            self.assertIn(
-                "Скачать руководство пользователя Neural DSP Quad Cortex 4.1.0 "
-                "на русском языке (PDF)",
-                content,
-            )
+            self.assertIn("Опубликовано", content)
+            self.assertIn("| Устройство | Quad Cortex |", content)
+            self.assertIn("| Плагин | Example Plugin |", content)
             self.assertIn("[Скачать PDF]", content)
             self.assertIn(
                 "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf?raw=1",
@@ -264,14 +289,63 @@ class RepositoryPolicyTests(unittest.TestCase):
             ):
                 update_readme(
                     path,
-                    version="4.1.0",
-                    edition_date="2026-08-23",
-                    pdf_path=(
-                        "manuals/quad-cortex/"
-                        "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
-                    ),
-                    source_url="https://example.test/manual",
+                    rows=[
+                        {
+                            "category": "Устройство",
+                            "display_name": "Quad Cortex",
+                            "version": "4.1.0",
+                            "edition_date": "23.08.2026",
+                            "pdf_path": (
+                                "manuals/quad-cortex/"
+                                "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
+                            ),
+                            "source_url": "https://example.test/manual",
+                        }
+                    ],
                 )
+
+    def test_manual_catalog_reads_every_published_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            config_directory = repository / ".github" / "manuals"
+            config_directory.mkdir(parents=True)
+            fixtures = [
+                {
+                    "slug": "quad-cortex",
+                    "display_name": "Quad Cortex",
+                    "category": "Устройство",
+                    "source_url": "https://example.test/quad-cortex",
+                    "pdf_directory": "manuals/quad-cortex",
+                    "pdf_name_template": "Quad_Cortex_RU_v{version}_rev{date}.pdf",
+                    "filename": "Quad_Cortex_RU_v4.0.0_rev2026-07-23.pdf",
+                },
+                {
+                    "slug": "example-plugin",
+                    "display_name": "Example Plugin",
+                    "category": "Плагин",
+                    "source_url": "https://example.test/plugin",
+                    "pdf_directory": "manuals/example-plugin",
+                    "pdf_name_template": "Example_Plugin_RU_v{version}_rev{date}.pdf",
+                    "filename": "Example_Plugin_RU_v1.2.0_rev2026-08-24.pdf",
+                },
+            ]
+            for item in fixtures:
+                config = {key: value for key, value in item.items() if key != "filename"}
+                (config_directory / f"{item['slug']}.json").write_text(
+                    json.dumps(config), encoding="utf-8"
+                )
+                pdf_directory = repository / item["pdf_directory"]
+                pdf_directory.mkdir(parents=True)
+                (pdf_directory / item["filename"]).write_bytes(b"%PDF")
+
+            rows = manual_catalog(repository)
+
+            self.assertEqual(
+                ["Example Plugin", "Quad Cortex"],
+                [row["display_name"] for row in rows],
+            )
+            self.assertEqual("24.08.2026", rows[0]["edition_date"])
+            self.assertEqual("23.07.2026", rows[1]["edition_date"])
 
     def test_repository_readme_keeps_search_content_and_update_markers(self) -> None:
         content = (REPOSITORY / "README.md").read_text(encoding="utf-8")
@@ -281,10 +355,10 @@ class RepositoryPolicyTests(unittest.TestCase):
             content.index("<!-- MANUAL_STATUS:START -->"),
             content.index("<!-- MANUAL_STATUS:END -->"),
         )
-        self.assertIn("# Руководства Neural DSP на русском: Quad Cortex", content)
-        self.assertIn("Скачать инструкцию Quad Cortex на русском", content)
-        self.assertIn("руководства Neural DSP на русском языке", content)
-        self.assertIn("неофициальная русская локализация", content)
+        self.assertIn("# Руководства Neural DSP на русском языке", content)
+        self.assertIn("устройств, плагинов и программ Neural DSP", content)
+        self.assertIn("| Устройство | Quad Cortex |", content)
+        self.assertIn("неофициальные русские переводы", content)
 
     def test_manual_directory_rejects_non_pdf_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -305,7 +379,7 @@ class RepositoryPolicyTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_check_workflow_is_manual_only_and_has_no_paid_api_contract(self) -> None:
+    def test_check_workflow_is_manual_only_and_read_only(self) -> None:
         check_workflow = (REPOSITORY / ".github" / "workflows" / "check-quad-cortex.yml").read_text(
             encoding="utf-8"
         )
@@ -321,8 +395,6 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("cron:", check_workflow)
         self.assertIn("contents: read", check_workflow)
         self.assertNotIn("contents: write", check_workflow)
-        self.assertNotIn("OPENAI_API_KEY", check_workflow)
-        self.assertNotIn("OPENAI_MODEL", check_workflow)
         self.assertNotIn("manual_sync.py update", check_workflow)
         self.assertIn("group: quad-cortex-manual-state", check_workflow)
         self.assertIn("group: quad-cortex-manual-state", release_workflow)
@@ -347,8 +419,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('--state-archive "$RUNNER_TEMP/state-candidate/$STATE_ASSET"', workflow)
         self.assertIn('--edition-date "$EDITION_DATE"', workflow)
         self.assertIn("steps.state_pdf.outcome == 'success'", workflow)
-        self.assertIn("codex/bootstrap-quad-cortex-automation", workflow)
-        self.assertIn("mode=bootstrap", workflow)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'update/quad-cortex/')", workflow)
+        self.assertNotIn("mode=bootstrap", workflow)
         self.assertIn("инструкция на русском языке (PDF)", workflow)
         self.assertIn(
             "Полное руководство пользователя Neural DSP Quad Cortex", workflow
@@ -364,36 +436,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("validate-repository", workflow)
         self.assertIn("contents: read", workflow)
 
-    def test_operational_documentation_assigns_scheduling_to_codex(self) -> None:
+    def test_public_readme_contains_only_reader_facing_information(self) -> None:
         readme = (REPOSITORY / "README.md").read_text(encoding="utf-8")
-        documentation = (REPOSITORY / "docs" / "AUTOMATION.md").read_text(encoding="utf-8")
 
-        self.assertIn(
-            "Локальная автоматизация Codex — **единственный автоматический планировщик и источник проверки изменений**",
-            readme,
-        )
-        self.assertIn("действующего плана Codex пользователя", readme)
-        self.assertIn(
-            "`OPENAI_API_KEY` и отдельно оплачиваемый API перевода не используются",
-            readme,
-        )
-        self.assertIn("не запускается по расписанию", readme)
-
-        self.assertIn(
-            "Локальная автоматизация Codex — **единственный автоматический планировщик и единственная система, которая отслеживает изменения оригинала**",
-            documentation,
-        )
-        self.assertIn("только резервный диагностический инструмент", documentation)
-        self.assertIn("ровно один способ запуска: `workflow_dispatch`", documentation)
-        self.assertIn("**не использует** `OPENAI_API_KEY`", documentation)
-        self.assertIn("отдельно оплачиваемый API перевода", documentation)
-        self.assertNotIn("60 days", documentation)
-        self.assertNotIn("60 дней", documentation)
-        self.assertIn("$env:PYTHONUTF8='1'", documentation)
-        self.assertIn(
-            "Перед публикацией обязательны проверка человеком и явное принятие запроса на слияние",
-            documentation,
-        )
+        self.assertIn("устройств, плагинов и программ Neural DSP", readme)
+        self.assertIn("Сейчас готово первое руководство", readme)
+        self.assertIn("В каталог попадают только законченные переводы", readme)
+        self.assertFalse((REPOSITORY / "docs" / "AUTOMATION.md").exists())
 
 
 if __name__ == "__main__":

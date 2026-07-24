@@ -15,6 +15,8 @@ from .diffing import classify_change
 from .pdf import build_pdf, pdf_metrics
 from .repository import (
     expected_pdf_name,
+    manual_catalog,
+    parse_pdf_name,
     replace_manual_pdf,
     update_readme,
     validate_manual_directory,
@@ -42,6 +44,32 @@ def _write_result(value: dict[str, Any], path: str | None) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
+
+
+def _translations(path: str, changed_keys: list[str]) -> dict[str, dict[str, str]]:
+    payload = read_json(Path(path).resolve())
+    units = payload.get("units")
+    if not isinstance(units, dict):
+        raise RuntimeError("Translation file must contain a units object.")
+    expected = set(changed_keys)
+    actual = set(units)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise RuntimeError(
+            f"Translation units do not match the change report. Missing={missing}; extra={extra}"
+        )
+    result: dict[str, dict[str, str]] = {}
+    for key, values in units.items():
+        if not isinstance(key, str) or not isinstance(values, dict):
+            raise RuntimeError(f"Translations for {key!r} must be an object.")
+        if not all(
+            isinstance(item_id, str) and isinstance(value, str)
+            for item_id, value in values.items()
+        ):
+            raise RuntimeError(f"Translations for {key} must contain text values.")
+        result[key] = values
+    return result
 
 
 def _clean_work_directory(path: str, expected_leaf: str) -> Path:
@@ -144,12 +172,14 @@ def command_update(args: argparse.Namespace) -> int:
     state_directory = work_directory / "state"
     state = unpack_state(Path(args.state_archive).resolve(), state_directory)
     document_path = state_directory / DOCUMENT_FILE
+    translations = _translations(args.translations, report["changed_units"])
     update_summary = apply_safe_update(
         state=state,
         candidate_snapshot=candidate,
         changed_keys=report["changed_units"],
         document_path=document_path,
         asset_directory=state_directory / state["asset_directory"],
+        translations_by_unit=translations,
         edition_date=edition_date,
     )
     output_pdf = Path(args.output_pdf).resolve()
@@ -193,10 +223,7 @@ def command_publish(args: argparse.Namespace) -> int:
     relative_pdf = destination.relative_to(repository).as_posix()
     update_readme(
         repository / "README.md",
-        version=version,
-        edition_date=result["edition_date"],
-        pdf_path=relative_pdf,
-        source_url=config["source_url"],
+        rows=manual_catalog(repository),
     )
     policy = validate_manual_directory(pdf_directory, name)
     _write_result(
@@ -219,15 +246,8 @@ def command_validate(args: argparse.Namespace) -> int:
     pdf_files = list(pdf_directory.glob("*.pdf"))
     if len(pdf_files) != 1:
         validate_manual_directory(pdf_directory, "<missing>")
-    name_match = __import__("re").fullmatch(
-        r"Quad_Cortex_User_Manual_RU_v(\d+\.\d+\.\d+)_rev(\d{4}-\d{2}-\d{2})\.pdf",
-        pdf_files[0].name,
-    )
-    if not name_match:
-        raise RuntimeError(
-            "Published PDF filename does not match the required versioned format."
-        )
-    name = expected_pdf_name(config, name_match.group(1), name_match.group(2))
+    version, edition_date = parse_pdf_name(config, pdf_files[0].name)
+    name = expected_pdf_name(config, version, edition_date)
     policy = validate_manual_directory(pdf_directory, name)
     metrics = pdf_metrics(pdf_files[0])
     _write_result({"status": "valid", "policy": policy, "pdf": metrics}, args.result)
@@ -323,6 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--state-archive", required=True)
     update.add_argument("--snapshot", required=True)
     update.add_argument("--report", required=True)
+    update.add_argument("--translations", required=True)
     update.add_argument("--work-directory", required=True)
     update.add_argument("--output-pdf", required=True)
     update.add_argument("--output-state", required=True)
