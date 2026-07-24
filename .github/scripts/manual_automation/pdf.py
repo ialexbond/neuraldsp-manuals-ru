@@ -54,6 +54,14 @@ _PRINT_LAYOUT_GUARD_CSS = """
     margin-block-start: 0;
     margin-top: 0;
   }
+  li.manual-toc-chapter-splittable {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  a.manual-toc-row-chapter {
+    break-after: avoid-page !important;
+    page-break-after: avoid !important;
+  }
 }
 """.strip()
 
@@ -109,11 +117,56 @@ def _page_top_content_audit(document: fitz.Document) -> dict[str, Any]:
     }
 
 
-def _apply_print_layout_guards(document_path: Path) -> dict[str, Any]:
+def _place_toc_continuation_before_section(
+    document: BeautifulSoup, before_section: str | None
+) -> bool:
+    """Split one long TOC chapter at a stable section without orphaning rows."""
+    if before_section is None:
+        return False
+
+    continuations = document.select("li.manual-toc-continuation")
+    if len(continuations) != 1:
+        raise PdfValidationError(
+            "Configured TOC pagination requires exactly one continuation header."
+        )
+
+    target_link = document.select_one(
+        f'a.manual-toc-row-section[data-toc-target-source-id="{before_section}"]'
+    )
+    if not isinstance(target_link, Tag):
+        raise PdfValidationError(
+            f"Configured TOC continuation target section {before_section!r} was not found."
+        )
+    target_item = target_link.find_parent("li")
+    chapter = target_link.find_parent("li", class_="manual-toc-chapter")
+    if not isinstance(target_item, Tag) or not isinstance(chapter, Tag):
+        raise PdfValidationError(
+            "Configured TOC continuation target is outside a chapter section list."
+        )
+
+    changed = False
+    chapter_classes = list(chapter.get("class", []))
+    if "manual-toc-chapter-splittable" not in chapter_classes:
+        chapter["class"] = [*chapter_classes, "manual-toc-chapter-splittable"]
+        changed = True
+    continuation = continuations[0]
+    if target_item.find_previous_sibling("li") is not continuation:
+        target_item.insert_before(continuation.extract())
+        changed = True
+    return changed
+
+
+def _apply_print_layout_guards(
+    document_path: Path, toc_continuation_before_section: str | None = None
+) -> dict[str, Any]:
     """Keep short heading leads together without making whole sections atomic."""
     source = document_path.read_text(encoding="utf-8")
     document = BeautifulSoup(source, "html.parser")
     changed = False
+    toc_continuation_placed = _place_toc_continuation_before_section(
+        document, toc_continuation_before_section
+    )
+    changed = changed or toc_continuation_placed
     doctypes = [
         node for node in document.contents if isinstance(node, Doctype)
     ]
@@ -179,7 +232,11 @@ def _apply_print_layout_guards(document_path: Path) -> dict[str, Any]:
             serialized,
             encoding="utf-8",
         )
-    return {"grouped_pairs": len(pairs), "changed": changed}
+    return {
+        "grouped_pairs": len(pairs),
+        "toc_continuation_placed": toc_continuation_placed,
+        "changed": changed,
+    }
 
 
 def _is_bold_span(span: dict[str, Any]) -> bool:
@@ -781,7 +838,11 @@ def build_pdf(
     config: dict[str, Any],
     baseline: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    layout_guards = _apply_print_layout_guards(document_path)
+    continuation_section = config.get("toc_continuation_before_section")
+    layout_guards = _apply_print_layout_guards(
+        document_path,
+        str(continuation_section) if continuation_section is not None else None,
+    )
     expected_playwright = str(config.get("playwright_version", ""))
     preview = output_pdf.with_name(output_pdf.stem + "-preview.pdf")
     preview_status = render_html(document_path, preview)

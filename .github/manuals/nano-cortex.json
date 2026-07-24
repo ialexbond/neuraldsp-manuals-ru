@@ -14,5 +14,6 @@
   "minimum_pdf_pages": 100,
   "maximum_pdf_page_delta_ratio": 0.12,
   "minimum_internal_link_count": 60,
+  "toc_continuation_before_section": "ch06-0095",
   "playwright_version": "1.61.1"
 }

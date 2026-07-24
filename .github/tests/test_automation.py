@@ -414,15 +414,73 @@ class PrintLayoutGuardTests(unittest.TestCase):
             soup.find("style", id="manual-print-layout-guards")
         )
         self.assertEqual(
-            {"grouped_pairs": 3, "changed": True},
+            {
+                "grouped_pairs": 3,
+                "toc_continuation_placed": False,
+                "changed": True,
+            },
             first,
         )
         self.assertEqual(
-            {"grouped_pairs": 0, "changed": False},
+            {
+                "grouped_pairs": 0,
+                "toc_continuation_placed": False,
+                "changed": False,
+            },
             second,
         )
         self.assertEqual(1, once.lower().count("<!doctype html>"))
         self.assertEqual(once, twice)
+
+    def test_places_toc_continuation_before_configured_section(self) -> None:
+        source = """<!DOCTYPE html>
+<html><head></head><body>
+<div id="manual-print-root">
+  <ol class="manual-toc-chapters">
+    <li class="manual-toc-continuation">Continuation</li>
+    <li class="manual-toc-chapter">
+      <a class="manual-toc-row-chapter">
+        <span class="manual-toc-chapter-number">5</span>
+      </a>
+    </li>
+    <li class="manual-toc-chapter">
+      <a class="manual-toc-row-chapter">
+        <span class="manual-toc-chapter-number">6</span>
+      </a>
+      <ol class="manual-toc-sections">
+        <li><a class="manual-toc-row-section"
+          data-toc-target-source-id="ch06-0003">First section</a></li>
+        <li><a class="manual-toc-row-section"
+          data-toc-target-source-id="ch06-0095">Split target</a></li>
+      </ol>
+    </li>
+  </ol>
+</div>
+</body></html>
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "document.html"
+            path.write_text(source, encoding="utf-8")
+
+            first = _apply_print_layout_guards(
+                path, toc_continuation_before_section="ch06-0095"
+            )
+            second = _apply_print_layout_guards(
+                path, toc_continuation_before_section="ch06-0095"
+            )
+            soup = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser")
+
+        target = soup.select_one(
+            'a[data-toc-target-source-id="ch06-0095"]'
+        ).find_parent("li")
+        continuation = soup.select_one("li.manual-toc-continuation")
+        chapter = target.find_parent("li", class_="manual-toc-chapter")
+        self.assertIs(target.find_previous_sibling("li"), continuation)
+        self.assertIn("manual-toc-chapter-splittable", chapter.get("class", []))
+        self.assertTrue(first["toc_continuation_placed"])
+        self.assertTrue(first["changed"])
+        self.assertFalse(second["toc_continuation_placed"])
+        self.assertFalse(second["changed"])
 
 
 class CanonicalizationTests(unittest.TestCase):
