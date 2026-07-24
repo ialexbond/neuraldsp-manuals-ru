@@ -6,8 +6,6 @@
   "source_url": "https://neuraldsp.com/manual/quad-cortex",
   "expected_chapter_count": 12,
   "minimum_section_count": 60,
-  "state_release_tag": "automation-state-quad-cortex-v1",
-  "state_asset_name": "quad-cortex-state-v1.zip",
   "pdf_directory": "manuals/quad-cortex",
   "pdf_name_template": "Quad_Cortex_User_Manual_RU_v{version}_rev{date}.pdf",
   "release_tag_template": "quad-cortex-v{version}-ru.{date}",

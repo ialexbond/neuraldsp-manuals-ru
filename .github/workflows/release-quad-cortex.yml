@@ -9,18 +9,15 @@ on:
       - "README.md"
 
 permissions:
-  actions: read
   contents: write
   issues: write
 
 concurrency:
-  group: quad-cortex-manual-state
+  group: quad-cortex-manual-release
   cancel-in-progress: false
 
 env:
   CONFIG: .github/manuals/quad-cortex.json
-  STATE_TAG: automation-state-quad-cortex-v1
-  STATE_ASSET: quad-cortex-state-v1.zip
   PYTHONUTF8: "1"
   GH_TOKEN: ${{ github.token }}
 
@@ -54,88 +51,21 @@ jobs:
             --repository "$GITHUB_WORKSPACE" \
             --result "$RUNNER_TEMP/merged-validation.json"
 
-      - name: Определить запуск с подготовленным состоянием
+      - name: Определить дату редакции
         id: metadata
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
-          import os, re
-          body = os.environ.get("PR_BODY", "")
+          import os
+          import re
+
           branch = os.environ["HEAD_BRANCH"]
-          run = re.search(r"<!-- state-run-id: (\d+) -->", body)
           date = re.search(r"update/quad-cortex/(\d{4}-\d{2}-\d{2})$", branch)
-          if not run or not date:
-              raise SystemExit("В запросе на слияние отсутствует отметка состояния автоматизации или дата в имени ветки")
-          print(f"run_id={run.group(1)}")
+          if not date:
+              raise SystemExit("В имени ветки отсутствует дата редакции")
           print(f"edition_date={date.group(1)}")
           PY
-
-      - name: Скачать состояние, подготовленное вместе с PDF
-        id: candidate
-        continue-on-error: true
-        run: |
-          mkdir -p "$RUNNER_TEMP/state-candidate"
-          gh run download "${{ steps.metadata.outputs.run_id }}" \
-            --name "quad-cortex-state-candidate-${{ steps.metadata.outputs.run_id }}" \
-            --dir "$RUNNER_TEMP/state-candidate"
-          test -f "$RUNNER_TEMP/state-candidate/$STATE_ASSET"
-
-      - name: Сообщить о недоступности подготовленного состояния
-        if: steps.candidate.outcome == 'failure'
-        run: |
-          gh label create update-detected --color D93F0B --description "Официальное руководство изменилось или автоматизация требует внимания" --force
-          body="PDF объединён, но сохранить новое состояние не удалось: соответствующий архив недоступен. Восстановите состояние до следующей плановой проверки. Запуск: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          issue="$(gh issue list --state open --label update-detected --search 'состояние автоматизации Quad Cortex in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body "$body"
-          else
-            gh issue create --title "[update-detected] Требуется восстановить состояние автоматизации Quad Cortex" --label update-detected --body "$body"
-          fi
-          exit 1
-
-      - name: Сверить подготовленное состояние с объединённым PDF
-        id: state_pdf
-        if: steps.candidate.outcome == 'success'
-        continue-on-error: true
-        env:
-          EDITION_DATE: ${{ steps.metadata.outputs.edition_date }}
-        run: |
-          pdf="$(find manuals/quad-cortex -maxdepth 1 -type f -name '*.pdf' -print -quit)"
-          test -n "$pdf"
-          python .github/scripts/manual_sync.py validate-state-pdf \
-            --config "$CONFIG" \
-            --state-archive "$RUNNER_TEMP/state-candidate/$STATE_ASSET" \
-            --pdf "$pdf" \
-            --edition-date "$EDITION_DATE"
-
-      - name: Сообщить о несоответствии состояния и PDF
-        if: steps.candidate.outcome == 'success' && steps.state_pdf.outcome == 'failure'
-        run: |
-          gh label create update-detected --color D93F0B --description "Официальное руководство изменилось или автоматизация требует внимания" --force
-          body="PDF объединён, но подготовленное для него состояние не прошло проверку подлинности и целостности. Сохранённое состояние и публичный релиз не обновлены. Запуск: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          issue="$(gh issue list --state open --label update-detected --search 'состояние автоматизации Quad Cortex in:title' --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body "$body"
-          else
-            gh issue create --title "[update-detected] Состояние автоматизации Quad Cortex не соответствует PDF" --label update-detected --body "$body"
-          fi
-          exit 1
-
-      - name: Сохранить новое состояние автоматизации
-        if: steps.state_pdf.outcome == 'success'
-        run: |
-          if gh release view "$STATE_TAG" >/dev/null 2>&1; then
-            gh release upload "$STATE_TAG" "$RUNNER_TEMP/state-candidate/$STATE_ASSET" --clobber
-          else
-            gh release create "$STATE_TAG" \
-              "$RUNNER_TEMP/state-candidate/$STATE_ASSET" \
-              --target "${{ github.event.pull_request.merge_commit_sha }}" \
-              --prerelease \
-              --title "Состояние автоматизации Quad Cortex v1" \
-              --notes "Общедоступное служебное состояние для ежемесячного обновления локализации. Секретных данных не содержит."
-          fi
 
       - name: Создать публичный релиз PDF
         env:
@@ -167,7 +97,6 @@ jobs:
           fi
 
       - name: Закрыть уведомления об устаревшем содержимом
-        if: steps.state_pdf.outcome == 'success'
         run: |
           for issue in $(gh issue list --state open --label update-detected --search 'руководство Quad Cortex in:title' --json number --jq '.[].number'); do
             gh issue close "$issue" --comment "Обновлённый PDF объединён в запросе #${{ github.event.pull_request.number }} и успешно опубликован."
