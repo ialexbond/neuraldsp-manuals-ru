@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from .alignment import align_snapshot
-from .canonical import extract_snapshot
+from .canonical import extract_snapshot, validate_snapshot_integrity
 from .diffing import classify_change
-from .pdf import build_pdf, pdf_metrics
+from .pdf import build_pdf, pdf_metrics, validate_pdf
 from .repository import (
     expected_pdf_name,
     manual_catalog,
@@ -72,20 +72,104 @@ def _translations(path: str, changed_keys: list[str]) -> dict[str, dict[str, str
     return result
 
 
-def _clean_work_directory(path: str, expected_leaf: str) -> Path:
+def _validate_state_manual(state: dict[str, Any], config: dict[str, Any]) -> None:
+    expected = str(config["slug"])
+    actual = state.get("manual")
+    if actual != expected:
+        raise RuntimeError(
+            f"State archive belongs to {actual!r}; expected {expected!r}."
+        )
+
+
+def _validate_update_inputs(
+    state: dict[str, Any],
+    candidate: dict[str, Any],
+    report: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    baseline = state.get("snapshot")
+    if not isinstance(baseline, dict):
+        raise RuntimeError("State archive has no valid baseline snapshot.")
+
+    validate_snapshot_integrity(baseline, label="Baseline")
+    validate_snapshot_integrity(candidate, label="Candidate")
+    expected_report = classify_change(baseline, candidate, config)
+    comparisons: dict[str, tuple[Any, Any]] = {
+        field: (report.get(field), expected_report.get(field))
+        for field in (
+            "schema_version",
+            "status",
+            "baseline_hash",
+            "candidate_hash",
+            "baseline_integrity_hash",
+            "candidate_integrity_hash",
+            "baseline_version",
+            "upstream_version",
+            "changed_units",
+            "added_units",
+            "removed_units",
+            "skeleton_changes",
+            "attribute_shape_changes",
+        )
+    }
+    configured_source = config.get("source_url")
+    comparisons.update(
+        {
+            "baseline_source_url": (
+                baseline.get("source_url"),
+                configured_source,
+            ),
+            "candidate_source_url": (
+                candidate.get("source_url"),
+                configured_source,
+            ),
+            "report_source_url": (
+                report.get("source_url"),
+                configured_source,
+            ),
+            "baseline_schema_version": (
+                baseline.get("schema_version"),
+                expected_report.get("schema_version"),
+            ),
+            "candidate_schema_version": (
+                candidate.get("schema_version"),
+                expected_report.get("schema_version"),
+            ),
+        }
+    )
+    mismatches = {
+        field: {"report_or_state": values[0], "expected": values[1]}
+        for field, values in comparisons.items()
+        if values[0] is None or values[1] is None or values[0] != values[1]
+    }
+    if mismatches:
+        raise RuntimeError(
+            "Change report and candidate do not match the current state snapshot: "
+            + json.dumps(mismatches, ensure_ascii=False, sort_keys=True)
+        )
+
+
+def _clean_work_directory(
+    path: str, expected_leaf: str, manual_slug: str | None = None
+) -> Path:
     directory = Path(path).resolve()
     protected = {Path.cwd().resolve(), Path.home().resolve(), Path(directory.anchor)}
     if directory in protected or any(directory in item.parents for item in protected):
         raise RuntimeError(
             f"Refusing to delete a protected work directory: {directory}"
         )
-    if directory.name != expected_leaf or directory.parent.name not in {
-        ".automation",
-        "quad-cortex",
-    }:
+    direct_automation_child = directory.parent.name == ".automation"
+    manual_automation_child = (
+        manual_slug is not None
+        and directory.parent.name == manual_slug
+        and directory.parent.parent.name == ".automation"
+    )
+    if directory.name != expected_leaf or not (
+        direct_automation_child or manual_automation_child
+    ):
         raise RuntimeError(
-            f"Work directory must end in .automation/{expected_leaf} or quad-cortex/{expected_leaf}: "
-            f"{directory}"
+            "Work directory must be a marked automation directory ending in "
+            f"{expected_leaf}: {directory}"
         )
     if directory.exists():
         shutil.rmtree(directory)
@@ -120,11 +204,16 @@ def command_bootstrap(args: argparse.Namespace) -> int:
             f"Localized HTML cannot be safely aligned with the source: {preview}"
         )
 
-    metrics = pdf_metrics(baseline_pdf, asset_directory / "fonts")
+    metrics = pdf_metrics(
+        baseline_pdf,
+        asset_directory / "fonts",
+        int(config["expected_chapter_count"]),
+    )
     with tempfile.TemporaryDirectory(prefix="manual-state-bootstrap-") as temporary:
         state_directory = Path(temporary) / "state"
         initialize_state_directory(
             state_directory,
+            str(config["slug"]),
             snapshot,
             localized_html,
             asset_directory,
@@ -147,9 +236,12 @@ def command_bootstrap(args: argparse.Namespace) -> int:
 
 def command_check(args: argparse.Namespace) -> int:
     config = _config(args.config)
-    work_directory = _clean_work_directory(args.work_directory, "check")
+    work_directory = _clean_work_directory(
+        args.work_directory, "check", str(config["slug"])
+    )
     state_directory = work_directory / "state"
     state = unpack_state(Path(args.state_archive).resolve(), state_directory)
+    _validate_state_manual(state, config)
     candidate = extract_snapshot(
         args.source or config["source_url"], config["expected_chapter_count"]
     )
@@ -168,9 +260,13 @@ def command_update(args: argparse.Namespace) -> int:
         )
     candidate = read_json(Path(args.snapshot).resolve())
     edition_date = args.edition_date or date.today().isoformat()
-    work_directory = _clean_work_directory(args.work_directory, "update")
+    work_directory = _clean_work_directory(
+        args.work_directory, "update", str(config["slug"])
+    )
     state_directory = work_directory / "state"
     state = unpack_state(Path(args.state_archive).resolve(), state_directory)
+    _validate_state_manual(state, config)
+    _validate_update_inputs(state, candidate, report, config)
     document_path = state_directory / DOCUMENT_FILE
     translations = _translations(args.translations, report["changed_units"])
     update_summary = apply_safe_update(
@@ -249,8 +345,14 @@ def command_validate(args: argparse.Namespace) -> int:
     version, edition_date = parse_pdf_name(config, pdf_files[0].name)
     name = expected_pdf_name(config, version, edition_date)
     policy = validate_manual_directory(pdf_directory, name)
-    metrics = pdf_metrics(pdf_files[0])
-    _write_result({"status": "valid", "policy": policy, "pdf": metrics}, args.result)
+    font_directory = repository / ".github" / "assets" / "fonts"
+    validation = validate_pdf(
+        pdf_files[0],
+        None,
+        config,
+        font_directory=font_directory,
+    )
+    _write_result({"status": "valid", "policy": policy, "pdf": validation}, args.result)
     return 0
 
 
@@ -262,10 +364,14 @@ def command_validate_state_pdf(args: argparse.Namespace) -> int:
         state = unpack_state(
             Path(args.state_archive).resolve(), Path(temporary) / "state"
         )
+        _validate_state_manual(state, config)
     version = state["snapshot"]["upstream_version"]
     expected_name = expected_pdf_name(config, version, edition_date)
     baseline = state.get("baseline_pdf", {})
-    actual = pdf_metrics(pdf_path)
+    actual = pdf_metrics(
+        pdf_path,
+        expected_chapter_count=int(config["expected_chapter_count"]),
+    )
     comparisons = {
         "filename": (pdf_path.name, expected_name),
         "state_filename": (baseline.get("name"), expected_name),
@@ -301,7 +407,7 @@ def command_validate_state_pdf(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Quad Cortex manual update automation")
+    parser = argparse.ArgumentParser(description="Manual update automation")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     snapshot = subparsers.add_parser(

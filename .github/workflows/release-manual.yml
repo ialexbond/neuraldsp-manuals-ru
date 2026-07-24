@@ -1,0 +1,256 @@
+name: Выпуск объединённого руководства
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+    paths:
+      - "manuals/**/*.pdf"
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: manual-release-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  release:
+    name: Публикация руководства
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить объединённую версию репозитория
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 2
+
+      - name: Настроить Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/requirements.txt
+
+      - name: Установить зависимости для проверки
+        run: python -m pip install -r .github/requirements.txt
+
+      - name: Определить изменённое руководство
+        id: metadata
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path, PurePosixPath
+
+          repository = Path.cwd()
+          sys.path.insert(0, str(repository / ".github" / "scripts"))
+          from manual_automation.repository import parse_pdf_name
+
+          repository_name = os.environ["GITHUB_REPOSITORY"]
+          pull_number = os.environ["PR_NUMBER"]
+          endpoint = f"repos/{repository_name}/pulls/{pull_number}"
+          pages = json.loads(
+              subprocess.check_output(
+                  [
+                      "gh",
+                      "api",
+                      "--paginate",
+                      "--slurp",
+                      "-H",
+                      "Accept: application/vnd.github+json",
+                      "-H",
+                      "X-GitHub-Api-Version: 2022-11-28",
+                      f"{endpoint}/files?per_page=100",
+                  ],
+                  text=True,
+                  encoding="utf-8",
+              )
+          )
+          changed_files = [
+              changed_file
+              for page in pages
+              for changed_file in page
+          ]
+          expected_file_count = int(
+              subprocess.check_output(
+                  [
+                      "gh",
+                      "api",
+                      "-H",
+                      "Accept: application/vnd.github+json",
+                      "-H",
+                      "X-GitHub-Api-Version: 2022-11-28",
+                      "--jq",
+                      ".changed_files",
+                      endpoint,
+                  ],
+                  text=True,
+                  encoding="utf-8",
+              ).strip()
+          )
+          if len(changed_files) != expected_file_count:
+              raise SystemExit(
+                  "Refusing to release because the paginated file list "
+                  f"contains {len(changed_files)} files but the pull request "
+                  f"reports {expected_file_count}"
+              )
+
+          def pdf_path(value):
+              if not isinstance(value, str):
+                  return None
+              path = PurePosixPath(value)
+              return path if path.suffix.lower() == ".pdf" else None
+
+          pdf_candidates = []
+          for changed_file in changed_files:
+              if not isinstance(changed_file, dict):
+                  raise SystemExit("Pull request file metadata is not an object")
+              current_pdf_path = pdf_path(changed_file.get("filename"))
+              if (
+                  current_pdf_path is not None
+                  and changed_file.get("status") != "removed"
+              ):
+                  pdf_candidates.append((changed_file, current_pdf_path))
+
+          if len(pdf_candidates) != 1:
+              raise SystemExit(
+                  "Expected exactly one non-removed manual PDF, "
+                  f"found {len(pdf_candidates)}"
+              )
+
+          pdf_file, pdf_posix_path = pdf_candidates[0]
+          if (
+              pdf_posix_path.is_absolute()
+              or len(pdf_posix_path.parts) < 2
+              or pdf_posix_path.parts[0] != "manuals"
+              or ".." in pdf_posix_path.parts
+          ):
+              raise SystemExit(
+                  f"Refusing to release PDF outside manuals/: {pdf_posix_path}"
+              )
+
+          pdf_directory = pdf_posix_path.parent
+          for changed_file in changed_files:
+              current_pdf_path = pdf_path(changed_file.get("filename"))
+              previous_pdf_path = pdf_path(changed_file.get("previous_filename"))
+
+              if changed_file is pdf_file:
+                  if (
+                      previous_pdf_path is not None
+                      and previous_pdf_path.parent != pdf_directory
+                  ):
+                      raise SystemExit(
+                          "Refusing to release a PDF renamed from another "
+                          f"directory: {previous_pdf_path}"
+                      )
+                  continue
+
+              referenced_pdf_paths = [
+                  path
+                  for path in (current_pdf_path, previous_pdf_path)
+                  if path is not None
+              ]
+              if not referenced_pdf_paths:
+                  continue
+              if changed_file.get("status") != "removed":
+                  raise SystemExit(
+                      "Refusing to release with another changed or renamed PDF: "
+                      + ", ".join(map(str, referenced_pdf_paths))
+                  )
+              outside_paths = [
+                  path
+                  for path in referenced_pdf_paths
+                  if path.parent != pdf_directory
+              ]
+              if outside_paths:
+                  raise SystemExit(
+                      "Removed PDF is outside the selected manual directory: "
+                      + ", ".join(map(str, outside_paths))
+                  )
+
+          pdf_path = Path(*pdf_posix_path.parts)
+          if not (repository / pdf_path).is_file():
+              raise SystemExit(f"Changed PDF is not a checked-out file: {pdf_path}")
+          matching = []
+          for config_path in sorted((repository / ".github" / "manuals").glob("*.json")):
+              config = json.loads(config_path.read_text(encoding="utf-8"))
+              if Path(config["pdf_directory"]) == pdf_path.parent:
+                  matching.append((config_path, config))
+          if len(matching) != 1:
+              raise SystemExit(
+                  f"Expected one configuration for {pdf_path}, found {len(matching)}"
+              )
+
+          config_path, config = matching[0]
+          version, edition_date = parse_pdf_name(config, pdf_path.name)
+          values = {
+              "config": config_path.relative_to(repository).as_posix(),
+              "display_name": config["display_name"],
+              "edition_date": edition_date,
+              "pdf": pdf_path.as_posix(),
+              "slug": config["slug"],
+              "source_url": config["source_url"],
+              "tag": config["release_tag_template"].format(
+                  version=version,
+                  date=edition_date,
+              ),
+              "version": version,
+          }
+          for key, value in values.items():
+              print(f"{key}={value}")
+          PY
+
+      - name: Повторно проверить объединённые публичные файлы
+        run: |
+          python .github/scripts/manual_sync.py validate-repository \
+            --config "${{ steps.metadata.outputs.config }}" \
+            --repository "$GITHUB_WORKSPACE" \
+            --result "$RUNNER_TEMP/merged-validation.json"
+
+      - name: Создать публичный релиз PDF
+        env:
+          DISPLAY_NAME: ${{ steps.metadata.outputs.display_name }}
+          EDITION_DATE: ${{ steps.metadata.outputs.edition_date }}
+          PDF_PATH: ${{ steps.metadata.outputs.pdf }}
+          SOURCE_URL: ${{ steps.metadata.outputs.source_url }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "Полное руководство пользователя Neural DSP $DISPLAY_NAME $VERSION на русском языке в формате PDF."
+            echo
+            echo "Дата редакции: $EDITION_DATE"
+            echo "Официальный источник: $SOURCE_URL"
+            echo "Запрос на слияние: #${{ github.event.pull_request.number }}"
+          } > "$notes"
+          title="$DISPLAY_NAME $VERSION — инструкция на русском языке (PDF)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$PDF_PATH" --clobber
+            gh release edit "$TAG" --notes-file "$notes" --title "$title"
+          else
+            gh release create "$TAG" "$PDF_PATH" \
+              --target "${{ github.event.pull_request.merge_commit_sha }}" \
+              --title "$title" \
+              --notes-file "$notes"
+          fi
+
+      - name: Закрыть уведомления об устаревшем содержимом
+        env:
+          DISPLAY_NAME: ${{ steps.metadata.outputs.display_name }}
+        run: |
+          for issue in $(gh issue list --state open --label update-detected --search "руководство $DISPLAY_NAME in:title" --json number --jq '.[].number'); do
+            gh issue close "$issue" --comment "Обновлённый PDF объединён в запросе #${{ github.event.pull_request.number }} и успешно опубликован."
+          done

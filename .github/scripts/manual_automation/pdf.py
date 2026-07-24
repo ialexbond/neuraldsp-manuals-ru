@@ -52,7 +52,9 @@ def _page_top_content_audit(document: fitz.Document) -> dict[str, Any]:
         rows = [
             sum(
                 value < _TOP_CONTENT_GRAY_THRESHOLD
-                for value in samples[y * pixmap.stride + left : y * pixmap.stride + right]
+                for value in samples[
+                    y * pixmap.stride + left : y * pixmap.stride + right
+                ]
             )
             >= _TOP_CONTENT_MIN_PIXELS_PER_ROW
             for y in range(pixmap.height)
@@ -157,7 +159,9 @@ def _normalize_font_name(name: str) -> str:
     return re.sub(r"^[A-Z]{6}\+", "", name).replace("-", " ").strip()
 
 
-def _chapter_opener_audit(document: fitz.Document) -> dict[str, Any]:
+def _chapter_opener_audit(
+    document: fitz.Document, expected_chapter_count: int = 12
+) -> dict[str, Any]:
     chapters: list[dict[str, Any]] = []
     title_only_pages: list[int] = []
     for item in document.get_toc(simple=True):
@@ -166,7 +170,7 @@ def _chapter_opener_audit(document: fitz.Document) -> dict[str, Any]:
         normalized_title = re.sub(
             r"[^\w]+", "", str(item[1]).casefold(), flags=re.UNICODE
         )
-        if not re.match(r"^(?:0[1-9]|1[0-2])", normalized_title):
+        if not re.match(r"^\d{2}", normalized_title):
             continue
         page_number = int(item[2])
         page_text = re.sub(
@@ -190,7 +194,7 @@ def _chapter_opener_audit(document: fitz.Document) -> dict[str, Any]:
         "chapter_count": len(chapters),
         "title_only_pages": title_only_pages,
         "chapters": chapters,
-        "valid": len(chapters) == 12 and not title_only_pages,
+        "valid": len(chapters) == expected_chapter_count and not title_only_pages,
     }
 
 
@@ -201,13 +205,17 @@ def _font_audit(document: fitz.Document, font_directory: Path | None) -> dict[st
         "IBMPlexSans Italic": "IBMPlexSans-Italic.ttf",
         "IBMPlexSans BoldItalic": "IBMPlexSans-BoldItalic.ttf",
     }
+    required_embedded = {"IBMPlexSans", "IBMPlexSans Bold"}
     xrefs: dict[int, str] = {}
     for page in document:
         for font in page.get_fonts(full=True):
             xrefs[int(font[0])] = str(font[3])
     names = sorted({_normalize_font_name(name) for name in xrefs.values()})
     unexpected = sorted(set(names) - set(expected_files))
-    missing = sorted(set(expected_files) - set(names))
+    # Chromium only embeds a face when the document actually uses it. Regular
+    # and bold are mandatory in every manual; italic faces remain optional but
+    # are still checked against the accepted font files whenever embedded.
+    missing = sorted(required_embedded - set(names))
     embedded_failures: list[str] = []
     metric_failures: list[dict[str, Any]] = []
     source_fonts: dict[str, TTFont] = {}
@@ -297,7 +305,11 @@ def _font_audit(document: fitz.Document, font_directory: Path | None) -> dict[st
     }
 
 
-def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str, Any]:
+def pdf_metrics(
+    pdf_path: Path,
+    font_directory: Path | None = None,
+    expected_chapter_count: int = 12,
+) -> dict[str, Any]:
     with fitz.open(pdf_path) as document:
         sizes = sorted(
             {
@@ -377,7 +389,7 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
             page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5), alpha=False)
             rendered_pages += 1
         outline = document.get_toc(simple=False)
-        chapter_openers = _chapter_opener_audit(document)
+        chapter_openers = _chapter_opener_audit(document, expected_chapter_count)
         invalid_bookmarks = sum(
             len(item) < 3 or not 1 <= int(item[2]) <= document.page_count
             for item in outline
@@ -410,12 +422,23 @@ def pdf_metrics(pdf_path: Path, font_directory: Path | None = None) -> dict[str,
 
 def validate_pdf(
     pdf_path: Path,
-    document_path: Path,
+    document_path: Path | None,
     config: dict[str, Any],
     baseline: dict[str, Any] | None = None,
+    *,
+    font_directory: Path | None = None,
 ) -> dict[str, Any]:
-    font_directory = document_path.parents[1] / "assets" / "fonts"
-    metrics = pdf_metrics(pdf_path, font_directory)
+    if font_directory is None:
+        if document_path is None:
+            raise PdfValidationError(
+                "A reference font directory is required for PDF validation."
+            )
+        font_directory = document_path.parents[1] / "assets" / "fonts"
+    metrics = pdf_metrics(
+        pdf_path,
+        font_directory,
+        int(config["expected_chapter_count"]),
+    )
     errors: list[str] = []
     if metrics["page_count"] < config["minimum_pdf_pages"]:
         errors.append(
@@ -499,16 +522,17 @@ def validate_pdf(
         ):
             errors.append("searchable Cyrillic text dropped by more than 10%")
 
-    soup = BeautifulSoup(document_path.read_text(encoding="utf-8"), "html.parser")
-    expected_pages = [
-        int(row.get_text(strip=True)) for row in soup.select(".manual-toc-page")
-    ]
-    links = internal_links(pdf_path)[: len(expected_pages)]
-    actual_pages = [link["destination_page"] + 1 for link in links]
-    if len(actual_pages) != len(expected_pages) or actual_pages != expected_pages:
-        errors.append(
-            "visible TOC page numbers do not match their PDF link destinations"
-        )
+    if document_path is not None:
+        soup = BeautifulSoup(document_path.read_text(encoding="utf-8"), "html.parser")
+        expected_pages = [
+            int(row.get_text(strip=True)) for row in soup.select(".manual-toc-page")
+        ]
+        links = internal_links(pdf_path)[: len(expected_pages)]
+        actual_pages = [link["destination_page"] + 1 for link in links]
+        if len(actual_pages) != len(expected_pages) or actual_pages != expected_pages:
+            errors.append(
+                "visible TOC page numbers do not match their PDF link destinations"
+            )
 
     result = {"valid": not errors, "errors": errors, **metrics}
     if errors:

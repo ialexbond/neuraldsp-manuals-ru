@@ -90,6 +90,8 @@ def classify_change(
         "upstream_version": candidate.get("upstream_version"),
         "baseline_hash": baseline.get("content_hash"),
         "candidate_hash": candidate.get("content_hash"),
+        "baseline_integrity_hash": baseline.get("integrity_hash"),
+        "candidate_integrity_hash": candidate.get("integrity_hash"),
         "changed_units": changed,
         "added_units": added,
         "removed_units": removed,

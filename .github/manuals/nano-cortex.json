@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "slug": "nano-cortex",
+  "display_name": "Nano Cortex",
+  "category": "Устройство",
+  "source_url": "https://neuraldsp.com/manual/nano-cortex",
+  "expected_chapter_count": 8,
+  "minimum_section_count": 54,
+  "pdf_directory": "manuals/nano-cortex",
+  "pdf_name_template": "Nano_Cortex_User_Manual_RU_v{version}_rev{date}.pdf",
+  "release_tag_template": "nano-cortex-v{version}-ru.{date}",
+  "maximum_changed_unit_ratio": 0.2,
+  "maximum_changed_unit_count": 15,
+  "minimum_pdf_pages": 100,
+  "maximum_pdf_page_delta_ratio": 0.12,
+  "minimum_internal_link_count": 60,
+  "playwright_version": "1.61.1"
+}
