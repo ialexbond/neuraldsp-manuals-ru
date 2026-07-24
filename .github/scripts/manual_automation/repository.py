@@ -85,14 +85,24 @@ def update_readme(
         raise RepositoryPolicyError(
             "Служебные маркеры таблицы статуса в README отсутствуют или дублируются."
         )
+    if content.index(STATUS_START) > content.index(STATUS_END):
+        raise RepositoryPolicyError(
+            "Служебные маркеры таблицы статуса в README расположены в неверном порядке."
+        )
     block = "\n".join(
         [
             STATUS_START,
+            (
+                f"**[Скачать руководство пользователя Neural DSP Quad Cortex {version} "
+                f"на русском языке (PDF)]({pdf_path}?raw=1)**"
+            ),
+            "",
             "| Продукт | Оригинал | Русская редакция | Статус | Скачать |",
             "| --- | --- | --- | --- | --- |",
             (
                 f"| Quad Cortex | [{version}]({source_url}) | {edition_date} | "
-                f"Актуально, автоматические проверки пройдены | [PDF]({pdf_path}) |"
+                f"Актуально, автоматические проверки пройдены | "
+                f"[Скачать PDF]({pdf_path}?raw=1) |"
             ),
             STATUS_END,
         ]

@@ -238,7 +238,53 @@ class RepositoryPolicyTests(unittest.TestCase):
             self.assertIn("2026-08-23", content)
             self.assertIn("Русская редакция", content)
             self.assertIn("Актуально, автоматические проверки пройдены", content)
+            self.assertIn(
+                "Скачать руководство пользователя Neural DSP Quad Cortex 4.1.0 "
+                "на русском языке (PDF)",
+                content,
+            )
+            self.assertIn("[Скачать PDF]", content)
+            self.assertIn(
+                "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf?raw=1",
+                content,
+            )
             self.assertNotIn("\nold\n", content)
+            self.assertTrue(content.startswith("before\n"))
+            self.assertTrue(content.endswith("\nafter\n"))
+
+    def test_readme_status_block_rejects_reversed_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "README.md"
+            path.write_text(
+                "<!-- MANUAL_STATUS:END -->\nold\n<!-- MANUAL_STATUS:START -->\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                RepositoryPolicyError, "расположены в неверном порядке"
+            ):
+                update_readme(
+                    path,
+                    version="4.1.0",
+                    edition_date="2026-08-23",
+                    pdf_path=(
+                        "manuals/quad-cortex/"
+                        "Quad_Cortex_User_Manual_RU_v4.1.0_rev2026-08-23.pdf"
+                    ),
+                    source_url="https://example.test/manual",
+                )
+
+    def test_repository_readme_keeps_search_content_and_update_markers(self) -> None:
+        content = (REPOSITORY / "README.md").read_text(encoding="utf-8")
+        self.assertEqual(1, content.count("<!-- MANUAL_STATUS:START -->"))
+        self.assertEqual(1, content.count("<!-- MANUAL_STATUS:END -->"))
+        self.assertLess(
+            content.index("<!-- MANUAL_STATUS:START -->"),
+            content.index("<!-- MANUAL_STATUS:END -->"),
+        )
+        self.assertIn("# Руководства Neural DSP на русском: Quad Cortex", content)
+        self.assertIn("Скачать инструкцию Quad Cortex на русском", content)
+        self.assertIn("руководства Neural DSP на русском языке", content)
+        self.assertIn("неофициальная русская локализация", content)
 
     def test_manual_directory_rejects_non_pdf_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -303,6 +349,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("steps.state_pdf.outcome == 'success'", workflow)
         self.assertIn("codex/bootstrap-quad-cortex-automation", workflow)
         self.assertIn("mode=bootstrap", workflow)
+        self.assertIn("инструкция на русском языке (PDF)", workflow)
+        self.assertIn(
+            "Полное руководство пользователя Neural DSP Quad Cortex", workflow
+        )
 
     def test_pull_requests_have_a_required_validation_workflow(self) -> None:
         workflow = (
