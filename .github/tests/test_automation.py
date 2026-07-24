@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import fitz
+from bs4 import BeautifulSoup
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -26,7 +27,9 @@ from manual_automation.cli import command_validate  # noqa: E402
 from manual_automation.diffing import classify_change  # noqa: E402
 from manual_automation.pdf import (  # noqa: E402
     PdfValidationError,
+    _apply_print_layout_guards,
     _chapter_opener_audit,
+    _heading_orphan_audit,
     _page_top_content_audit,
     pdf_metrics,
     validate_pdf,
@@ -147,6 +150,7 @@ class PdfValidationTests(unittest.TestCase):
         "out_of_bounds_text_blocks": [],
         "text_block_overlaps": [],
         "page_top_content": {"maximum_y_pt": 90.0, "failures": []},
+        "heading_orphans": [],
         "rendered_page_count": 10,
         "fonts": {"valid": True},
         "file_size": 1000,
@@ -190,6 +194,17 @@ class PdfValidationTests(unittest.TestCase):
                     "maximum_y_pt": 90.0,
                     "failures": [{"page": 1, "first_content_y_pt": 120.0}],
                 }
+            },
+            "orphan headings": {
+                "heading_orphans": [
+                    {
+                        "page": 4,
+                        "text": "Standalone heading",
+                        "bbox": [100.0, 650.0, 260.0, 675.0],
+                        "font_size_pt": 18.0,
+                        "candidate_type": "heading",
+                    }
+                ]
             },
             "accepted fonts": {"fonts": {"valid": False}},
         }
@@ -290,6 +305,124 @@ class PageTopContentAuditTests(unittest.TestCase):
                 audit = self._audit_page(130, **options)
                 self.assertEqual([], audit["failures"])
                 self.assertLess(audit["pages"][0]["first_content_y_pt"], 90)
+
+
+class HeadingOrphanAuditTests(unittest.TestCase):
+    @staticmethod
+    def _audit_page(
+        text: str,
+        *,
+        font_size: float,
+        bold: bool,
+        content_below: bool = False,
+    ) -> list[dict[str, object]]:
+        with fitz.open() as document:
+            page = document.new_page(width=595, height=842)
+            page.insert_text(
+                (100, 650),
+                text,
+                fontsize=font_size,
+                fontname="hebo" if bold else "helv",
+            )
+            if content_below:
+                page.draw_rect(
+                    fitz.Rect(100, 700, 300, 730),
+                    color=(0, 0, 0),
+                    fill=(0, 0, 0),
+                )
+            return _heading_orphan_audit(document)
+
+    def test_bold_eighteen_point_orphan_is_detected(self) -> None:
+        findings = self._audit_page(
+            "Standalone heading",
+            font_size=18,
+            bold=True,
+        )
+
+        self.assertEqual(1, len(findings))
+        self.assertEqual("Standalone heading", findings[0]["text"])
+        self.assertEqual("heading", findings[0]["candidate_type"])
+
+    def test_uppercase_twelve_point_orphan_is_detected(self) -> None:
+        findings = self._audit_page(
+            "ANALOG OUTPUTS AUTO-SUM",
+            font_size=12,
+            bold=True,
+        )
+
+        self.assertEqual(1, len(findings))
+        self.assertEqual("uppercase_label", findings[0]["candidate_type"])
+
+    def test_heading_with_rendered_content_below_passes(self) -> None:
+        findings = self._audit_page(
+            "Heading with diagram",
+            font_size=18,
+            bold=True,
+            content_below=True,
+        )
+
+        self.assertEqual([], findings)
+
+    def test_normal_body_line_is_not_a_candidate(self) -> None:
+        findings = self._audit_page(
+            "Normal body line",
+            font_size=12,
+            bold=False,
+        )
+
+        self.assertEqual([], findings)
+
+
+class PrintLayoutGuardTests(unittest.TestCase):
+    def test_groups_heading_leads_and_is_idempotent(self) -> None:
+        source = """<!DOCTYPE html>
+<!DOCTYPE html>
+<html><head></head><body>
+<div id="manual-print-root"><div class="erHMFr">
+  <h3>Section heading</h3><p>Short introductory paragraph.</p>
+  <h4>Diagram heading</h4><img class="dUoPhj" src="diagram.svg">
+  <p>ANALOG OUTPUTS AUTO-SUM</p><img class="dUoPhj" src="control.svg">
+  <p>Ordinary body copy.</p><img class="dUoPhj" src="example.svg">
+</div></div>
+</body></html>
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "document.html"
+            path.write_text(source, encoding="utf-8")
+
+            first = _apply_print_layout_guards(path)
+            once = path.read_text(encoding="utf-8")
+            second = _apply_print_layout_guards(path)
+            twice = path.read_text(encoding="utf-8")
+
+        soup = BeautifulSoup(once, "html.parser")
+        groups = soup.select(".keep-heading-with-next")
+        self.assertEqual(3, len(groups))
+        self.assertEqual(
+            ["h3", "p"],
+            [child.name for child in groups[0].find_all(recursive=False)],
+        )
+        self.assertEqual(
+            ["h4", "img"],
+            [child.name for child in groups[1].find_all(recursive=False)],
+        )
+        self.assertEqual(
+            ["p", "img"],
+            [child.name for child in groups[2].find_all(recursive=False)],
+        )
+        self.assertIsNotNone(
+            soup.find("style", id="manual-print-layout-guards")
+        )
+        self.assertEqual(
+            {"grouped_pairs": 3, "changed": True},
+            first,
+        )
+        self.assertEqual(
+            {"grouped_pairs": 0, "changed": False},
+            second,
+        )
+        self.assertEqual(1, once.lower().count("<!doctype html>"))
+        self.assertEqual(once, twice)
 
 
 class CanonicalizationTests(unittest.TestCase):

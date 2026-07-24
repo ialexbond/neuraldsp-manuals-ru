@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import fitz
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Doctype, Tag
 from fontTools.ttLib import TTFont
 
 
@@ -24,6 +24,38 @@ _TOP_CONTENT_GRAY_THRESHOLD = 252
 _TOP_CONTENT_LEFT_PT = 80.0
 _TOP_CONTENT_RIGHT_PT = 515.0
 _TOP_CONTENT_MIN_PIXELS_PER_ROW = 8
+
+_ORPHAN_HEADING_DPI = 144
+_ORPHAN_HEADING_LOWER_PAGE_RATIO = 0.70
+_ORPHAN_HEADING_LEFT_PT = 80.0
+_ORPHAN_HEADING_RIGHT_PT = 515.0
+_ORPHAN_HEADING_BOTTOM_PT = 771.0
+_ORPHAN_HEADING_MIN_SIZE_PT = 13.5
+_ORPHAN_HEADING_UPPERCASE_MIN_SIZE_PT = 12.0
+_ORPHAN_HEADING_UPPERCASE_MAX_CHARACTERS = 80
+_ORPHAN_HEADING_UPPERCASE_MAX_WORDS = 8
+_ORPHAN_HEADING_GRAY_THRESHOLD = 252
+_ORPHAN_HEADING_MIN_PIXELS_PER_ROW = 8
+
+_PRINT_LAYOUT_GUARD_STYLE_ID = "manual-print-layout-guards"
+_PRINT_LAYOUT_GUARD_CSS = """
+@media print {
+  img.dUoPhj {
+    break-after: auto !important;
+    page-break-after: auto !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  .keep-heading-with-next {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  .keep-heading-with-next > :first-child {
+    margin-block-start: 0;
+    margin-top: 0;
+  }
+}
+""".strip()
 
 
 def _page_top_content_audit(document: fitz.Document) -> dict[str, Any]:
@@ -75,6 +107,198 @@ def _page_top_content_audit(document: fitz.Document) -> dict[str, Any]:
         "pages": findings,
         "failures": failures,
     }
+
+
+def _apply_print_layout_guards(document_path: Path) -> dict[str, Any]:
+    """Keep short heading leads together without making whole sections atomic."""
+    source = document_path.read_text(encoding="utf-8")
+    document = BeautifulSoup(source, "html.parser")
+    changed = False
+    doctypes = [
+        node for node in document.contents if isinstance(node, Doctype)
+    ]
+    for duplicate in doctypes[1:]:
+        duplicate.extract()
+        changed = True
+
+    style = document.find("style", id=_PRINT_LAYOUT_GUARD_STYLE_ID)
+    if not isinstance(style, Tag):
+        if not isinstance(document.head, Tag):
+            raise PdfValidationError("Localized manual HTML has no head element.")
+        style = document.new_tag("style", id=_PRINT_LAYOUT_GUARD_STYLE_ID)
+        document.head.append(style)
+        changed = True
+    if style.get_text() != _PRINT_LAYOUT_GUARD_CSS:
+        style.string = _PRINT_LAYOUT_GUARD_CSS
+        changed = True
+
+    pairs: list[tuple[Tag, Tag]] = []
+    heading_names = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    for parent in document.select("#manual-print-root .erHMFr"):
+        children = [
+            child for child in parent.children if isinstance(child, Tag)
+        ]
+        for label, following in zip(children, children[1:], strict=False):
+            is_heading = label.name in heading_names
+            is_image = (
+                following.name == "img"
+                and "dUoPhj" in following.get("class", [])
+            )
+            is_introductory_paragraph = (
+                is_heading
+                and following.name == "p"
+                and bool(following.get_text(" ", strip=True))
+            )
+            label_text = " ".join(
+                label.get_text(" ", strip=True).split()
+            )
+            if (
+                is_introductory_paragraph
+                or is_image
+                and (
+                    is_heading
+                    or _is_short_uppercase_label(label_text)
+                )
+            ):
+                pairs.append((label, following))
+
+    for label, following in pairs:
+        wrapper = document.new_tag(
+            "div", attrs={"class": "keep-heading-with-next"}
+        )
+        label.insert_before(wrapper)
+        wrapper.append(label.extract())
+        wrapper.append(following.extract())
+        changed = True
+
+    if changed:
+        serialized = str(document)
+        if not serialized.lstrip().lower().startswith("<!doctype html>"):
+            serialized = "<!DOCTYPE html>\n" + serialized
+        document_path.write_text(
+            serialized,
+            encoding="utf-8",
+        )
+    return {"grouped_pairs": len(pairs), "changed": changed}
+
+
+def _is_bold_span(span: dict[str, Any]) -> bool:
+    font_name = str(span.get("font") or "")
+    return bool(int(span.get("flags", 0)) & fitz.TEXT_FONT_BOLD) or bool(
+        re.search(r"(?:bold|semibold|demibold|black)", font_name, re.IGNORECASE)
+    )
+
+
+def _is_short_uppercase_label(text: str) -> bool:
+    letters = [character for character in text if character.isalpha()]
+    return (
+        bool(letters)
+        and all(character.isupper() for character in letters)
+        and len(text) <= _ORPHAN_HEADING_UPPERCASE_MAX_CHARACTERS
+        and len(text.split()) <= _ORPHAN_HEADING_UPPERCASE_MAX_WORDS
+    )
+
+
+def _clip_has_substantive_content(page: fitz.Page, clip: fitz.Rect) -> bool:
+    """Return whether a rendered body clip contains visible material."""
+    if clip.is_empty or clip.height <= 0:
+        return False
+    scale = _ORPHAN_HEADING_DPI / 72
+    pixmap = page.get_pixmap(
+        matrix=fitz.Matrix(scale, scale),
+        colorspace=fitz.csGRAY,
+        alpha=False,
+        clip=clip,
+    )
+    samples = pixmap.samples
+    previous_row_has_content = False
+    for row_index in range(pixmap.height):
+        row_start = row_index * pixmap.stride
+        row_has_content = (
+            sum(
+                value < _ORPHAN_HEADING_GRAY_THRESHOLD
+                for value in samples[row_start : row_start + pixmap.width]
+            )
+            >= _ORPHAN_HEADING_MIN_PIXELS_PER_ROW
+        )
+        if previous_row_has_content and row_has_content:
+            return True
+        previous_row_has_content = row_has_content
+    return False
+
+
+def _heading_orphan_audit(document: fitz.Document) -> list[dict[str, Any]]:
+    """Find standalone lower-page headings with no rendered content below.
+
+    Only pages containing a candidate are rendered, and only the central body
+    clip below that candidate is rasterized. This makes vector drawings and
+    images count as following content without paying the cost of rendering
+    every page a second time.
+    """
+    findings: list[dict[str, Any]] = []
+    for page_index, page in enumerate(document):
+        lower_page_y = page.rect.height * _ORPHAN_HEADING_LOWER_PAGE_RATIO
+        body_right = min(_ORPHAN_HEADING_RIGHT_PT, page.rect.x1)
+        body_bottom = min(_ORPHAN_HEADING_BOTTOM_PT, page.rect.y1)
+        for block in page.get_text("dict", sort=True).get("blocks", []):
+            if int(block.get("type", -1)) != 0:
+                continue
+            lines = [
+                line
+                for line in block.get("lines", [])
+                if any(
+                    str(span.get("text") or "").strip()
+                    for span in line.get("spans", [])
+                )
+            ]
+            if len(lines) != 1:
+                continue
+            spans = [
+                span
+                for span in lines[0].get("spans", [])
+                if str(span.get("text") or "").strip()
+            ]
+            if not spans or not all(_is_bold_span(span) for span in spans):
+                continue
+            text = " ".join(
+                str(span.get("text") or "").strip() for span in spans
+            ).strip()
+            font_size = max(float(span.get("size", 0.0)) for span in spans)
+            if font_size >= _ORPHAN_HEADING_MIN_SIZE_PT:
+                candidate_type = "heading"
+            elif (
+                font_size >= _ORPHAN_HEADING_UPPERCASE_MIN_SIZE_PT
+                and _is_short_uppercase_label(text)
+            ):
+                candidate_type = "uppercase_label"
+            else:
+                continue
+            rectangle = fitz.Rect(lines[0].get("bbox", block.get("bbox")))
+            if (
+                rectangle.y0 < lower_page_y
+                or rectangle.y1 + 4 >= body_bottom
+                or rectangle.x1 <= _ORPHAN_HEADING_LEFT_PT
+                or rectangle.x0 >= body_right
+            ):
+                continue
+            below = fitz.Rect(
+                _ORPHAN_HEADING_LEFT_PT,
+                rectangle.y1 + 4,
+                body_right,
+                body_bottom,
+            )
+            if _clip_has_substantive_content(page, below):
+                continue
+            findings.append(
+                {
+                    "page": page_index + 1,
+                    "text": text,
+                    "bbox": [round(value, 2) for value in rectangle],
+                    "font_size_pt": round(font_size, 2),
+                    "candidate_type": candidate_type,
+                }
+            )
+    return findings
 
 
 def render_html(document_path: Path, output_pdf: Path) -> dict[str, Any]:
@@ -396,6 +620,7 @@ def pdf_metrics(
         )
         fonts = _font_audit(document, font_directory)
         page_top_content = _page_top_content_audit(document)
+        heading_orphans = _heading_orphan_audit(document)
         raw_pdf = pdf_path.read_bytes()
         return {
             "sha256": _sha256(pdf_path),
@@ -414,6 +639,7 @@ def pdf_metrics(
             "out_of_bounds_text_blocks": out_of_bounds,
             "text_block_overlaps": overlaps,
             "page_top_content": page_top_content,
+            "heading_orphans": heading_orphans,
             "rendered_page_count": rendered_pages,
             "fonts": fonts,
             "file_size": pdf_path.stat().st_size,
@@ -496,6 +722,15 @@ def validate_pdf(
             f"{metrics['page_top_content']['maximum_y_pt']:.0f} pt from the top "
             f"({locations})"
         )
+    if metrics["heading_orphans"]:
+        locations = ", ".join(
+            f"page {item['page']} ({item['text']})"
+            for item in metrics["heading_orphans"]
+        )
+        errors.append(
+            "standalone headings must remain with substantive following content "
+            f"({locations})"
+        )
     if not metrics["fonts"]["valid"]:
         errors.append(
             "embedded IBM Plex Sans faces or metrics do not match the accepted fonts"
@@ -546,6 +781,7 @@ def build_pdf(
     config: dict[str, Any],
     baseline: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    layout_guards = _apply_print_layout_guards(document_path)
     expected_playwright = str(config.get("playwright_version", ""))
     preview = output_pdf.with_name(output_pdf.stem + "-preview.pdf")
     preview_status = render_html(document_path, preview)
@@ -561,6 +797,7 @@ def build_pdf(
     preview.unlink(missing_ok=True)
     validation = validate_pdf(output_pdf, document_path, config, baseline)
     return {
+        "layout_guards": layout_guards,
         "toc_mapping": toc_mapping,
         "preview_resources": preview_status,
         "resources": render_status,
