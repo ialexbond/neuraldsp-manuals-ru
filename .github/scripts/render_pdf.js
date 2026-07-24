@@ -76,6 +76,13 @@ async function main() {
     await page.goto(url, { waitUntil: "load", timeout: 120000 });
     await page.emulateMedia({ media: "print" });
     const resources = await page.evaluate(async () => {
+      const requiredFonts = [
+        '400 16px "IBM Plex Sans"',
+        '700 16px "IBM Plex Sans"',
+        'italic 400 16px "IBM Plex Sans"',
+        'italic 700 16px "IBM Plex Sans"',
+      ];
+      await Promise.all(requiredFonts.map((font) => document.fonts.load(font, "Русский текст")));
       await document.fonts.ready;
       const images = [...document.images];
       await Promise.all(images.map(async (image) => {
@@ -92,10 +99,10 @@ async function main() {
           .map((image) => image.getAttribute("src")),
         tocRows: document.querySelectorAll('a.manual-toc-row[href^="#"]').length,
         fonts: {
-          regular: document.fonts.check('400 16px "IBM Plex Sans"'),
-          bold: document.fonts.check('700 16px "IBM Plex Sans"'),
-          italic: document.fonts.check('italic 400 16px "IBM Plex Sans"'),
-          boldItalic: document.fonts.check('italic 700 16px "IBM Plex Sans"'),
+          regular: document.fonts.check(requiredFonts[0], "Русский текст"),
+          bold: document.fonts.check(requiredFonts[1], "Русский текст"),
+          italic: document.fonts.check(requiredFonts[2], "Русский текст"),
+          boldItalic: document.fonts.check(requiredFonts[3], "Русский текст"),
         },
       };
     });

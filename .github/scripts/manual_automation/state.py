@@ -82,6 +82,7 @@ def create_archive(source_directory: Path, destination: Path) -> None:
 
 def initialize_state_directory(
     destination: Path,
+    manual_slug: str,
     snapshot: dict[str, Any],
     localized_html: Path,
     asset_directory: Path,
@@ -96,7 +97,7 @@ def initialize_state_directory(
     edition_match = re.search(r"_rev(\d{4}-\d{2}-\d{2})\.pdf$", baseline_pdf.name)
     state = {
         "schema_version": 1,
-        "manual": "quad-cortex",
+        "manual": manual_slug,
         "snapshot": snapshot,
         "localized_document": DOCUMENT_FILE,
         "asset_directory": ASSET_DIRECTORY,

@@ -123,6 +123,50 @@ def semantic_payload(element: Tag, base_url: str) -> dict[str, Any]:
     }
 
 
+def _snapshot_content_hash(units: list[dict[str, Any]]) -> str:
+    digest_input = "\n".join(f"{unit['key']}:{unit['hash']}" for unit in units)
+    return hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+
+
+def _source_html_sha256(source_html: str) -> str:
+    return hashlib.sha256(source_html.encode("utf-8")).hexdigest()
+
+
+def _snapshot_integrity_hash(snapshot: dict[str, Any]) -> str:
+    chapter_fields = ("number", "source_id", "title", "unit_key", "section_keys")
+    unit_fields = (
+        "key",
+        "kind",
+        "chapter",
+        "source_id",
+        "title",
+        "hash",
+        "source_html_sha256",
+    )
+    payload = {
+        "source_url": snapshot.get("source_url"),
+        "upstream_version": snapshot.get("upstream_version"),
+        "page_title": snapshot.get("page_title"),
+        "chapter_count": snapshot.get("chapter_count"),
+        "section_count": snapshot.get("section_count"),
+        "chapters": [
+            {field: chapter.get(field) for field in chapter_fields}
+            for chapter in snapshot.get("chapters", [])
+        ],
+        "units": [
+            {field: unit.get(field) for field in unit_fields}
+            for unit in snapshot.get("units", [])
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _load_source(source: str, timeout: int = 60) -> tuple[str, str]:
     candidate = Path(source)
     if candidate.exists():
@@ -162,7 +206,7 @@ def _find_main_sections(article: Tag) -> list[Tag]:
     for candidate in article.find_all("div", id=True):
         if candidate.find_parent("article") is not article:
             continue
-        heading = candidate.find("h3")
+        heading = candidate.find(["h3", "h2"])
         if heading is None:
             continue
         parent = candidate.parent
@@ -212,13 +256,15 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
         chapter_key = f"chapter:{source_id}"
         chapter_element = heading.parent if isinstance(heading.parent, Tag) else heading
         payload = semantic_payload(chapter_element, resolved_url)
+        source_html = str(chapter_element)
         unit = {
             "key": chapter_key,
             "kind": "chapter",
             "chapter": number,
             "source_id": source_id,
             "title": _chapter_title(heading),
-            "source_html": str(chapter_element),
+            "source_html": source_html,
+            "source_html_sha256": _source_html_sha256(source_html),
             **payload,
         }
         units.append(unit)
@@ -230,8 +276,9 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
             key = f"section:{section_id}"
             if key in seen_keys:
                 raise SourceFormatError(f"Duplicate stable section identifier: {section_id}")
-            section_heading = section.find("h3")
+            section_heading = section.find(["h3", "h2"])
             payload = semantic_payload(section, resolved_url)
+            source_html = str(section)
             units.append(
                 {
                     "key": key,
@@ -239,7 +286,8 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
                     "chapter": number,
                     "source_id": section_id,
                     "title": normalize_text(section_heading.get_text(" ", strip=True)),
-                    "source_html": str(section),
+                    "source_html": source_html,
+                    "source_html_sha256": _source_html_sha256(source_html),
                     **payload,
                 }
             )
@@ -256,8 +304,7 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
             }
         )
 
-    digest_input = "\n".join(f"{unit['key']}:{unit['hash']}" for unit in units)
-    return {
+    snapshot = {
         "schema_version": 1,
         "source_url": resolved_url,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
@@ -265,10 +312,175 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
         "page_title": page_title,
         "chapter_count": len(chapters),
         "section_count": sum(len(chapter["section_keys"]) for chapter in chapters),
-        "content_hash": hashlib.sha256(digest_input.encode("utf-8")).hexdigest(),
+        "content_hash": _snapshot_content_hash(units),
         "chapters": chapters,
         "units": units,
     }
+    snapshot["integrity_hash"] = _snapshot_integrity_hash(snapshot)
+    return snapshot
+
+
+def validate_snapshot_integrity(
+    snapshot: dict[str, Any], *, label: str = "Snapshot"
+) -> None:
+    def fail(message: str) -> None:
+        raise RuntimeError(f"{label} snapshot integrity check failed: {message}")
+
+    source_url = snapshot.get("source_url")
+    if not isinstance(source_url, str) or not source_url:
+        fail("source_url must be a non-empty string")
+
+    units = snapshot.get("units")
+    if not isinstance(units, list):
+        fail("units must be a list")
+
+    verified_units: list[dict[str, Any]] = []
+    units_by_key: dict[str, dict[str, Any]] = {}
+    text_fields = ("path", "text", "raw")
+    attribute_fields = ("path", "tag", "name", "value")
+
+    def base_rows(
+        value: Any, fields: tuple[str, ...], unit_key: str, field_name: str
+    ) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            fail(f"{unit_key} {field_name} must be a list")
+        result: list[dict[str, Any]] = []
+        allowed = {*fields, "locator"}
+        for index, row in enumerate(value):
+            if not isinstance(row, dict):
+                fail(f"{unit_key} {field_name}[{index}] must be an object")
+            missing = [field for field in fields if field not in row]
+            unexpected = sorted(set(row) - allowed)
+            if missing or unexpected:
+                fail(
+                    f"{unit_key} {field_name}[{index}] fields are invalid; "
+                    f"missing={missing}, unexpected={unexpected}"
+                )
+            if "locator" in row and not isinstance(row["locator"], dict):
+                fail(f"{unit_key} {field_name}[{index}] locator must be an object")
+            result.append({field: row[field] for field in fields})
+        return result
+
+    for index, unit in enumerate(units):
+        if not isinstance(unit, dict):
+            fail(f"units[{index}] must be an object")
+        key = unit.get("key")
+        if not isinstance(key, str) or not key:
+            fail(f"units[{index}] has no valid key")
+        if key in units_by_key:
+            fail(f"duplicate unit key: {key}")
+
+        kind = unit.get("kind")
+        source_id = unit.get("source_id")
+        if kind not in {"chapter", "section"} or not isinstance(source_id, str):
+            fail(f"{key} has invalid kind or source_id")
+        if key != f"{kind}:{source_id}":
+            fail(f"{key} does not match its kind and source_id")
+        chapter = unit.get("chapter")
+        if not isinstance(chapter, int) or isinstance(chapter, bool):
+            fail(f"{key} has an invalid chapter number")
+
+        source_html = unit.get("source_html")
+        if not isinstance(source_html, str) or not source_html:
+            fail(f"{key} has no valid source_html")
+        if unit.get("source_html_sha256") != _source_html_sha256(source_html):
+            fail(f"{key} source_html_sha256 does not match source_html")
+        fragment = BeautifulSoup(source_html, "html.parser")
+        roots = [child for child in fragment.contents if isinstance(child, Tag)]
+        if len(roots) != 1:
+            fail(f"{key} source_html must contain exactly one root element")
+        recalculated = semantic_payload(roots[0], source_url)
+
+        for field in ("canonical", "hash", "skeleton"):
+            if unit.get(field) != recalculated[field]:
+                fail(f"{key} {field} does not match source_html")
+        if base_rows(unit.get("text_nodes"), text_fields, key, "text_nodes") != (
+            recalculated["text_nodes"]
+        ):
+            fail(f"{key} text_nodes do not match source_html")
+        if base_rows(
+            unit.get("attributes"), attribute_fields, key, "attributes"
+        ) != recalculated["attributes"]:
+            fail(f"{key} attributes do not match source_html")
+
+        units_by_key[key] = unit
+        verified_units.append({"key": key, "hash": recalculated["hash"]})
+
+    chapters = snapshot.get("chapters")
+    if not isinstance(chapters, list):
+        fail("chapters must be a list")
+    if snapshot.get("chapter_count") != len(chapters):
+        fail("chapter_count does not match chapters")
+
+    chapter_unit_keys = {
+        key for key, unit in units_by_key.items() if unit["kind"] == "chapter"
+    }
+    section_unit_keys = {
+        key for key, unit in units_by_key.items() if unit["kind"] == "section"
+    }
+    if snapshot.get("section_count") != len(section_unit_keys):
+        fail("section_count does not match section units")
+
+    referenced_chapters: set[str] = set()
+    referenced_sections: set[str] = set()
+    chapter_numbers: set[int] = set()
+    chapter_source_ids: set[str] = set()
+    for index, chapter_row in enumerate(chapters):
+        if not isinstance(chapter_row, dict):
+            fail(f"chapters[{index}] must be an object")
+        number = chapter_row.get("number")
+        source_id = chapter_row.get("source_id")
+        unit_key = chapter_row.get("unit_key")
+        section_keys = chapter_row.get("section_keys")
+        if (
+            not isinstance(number, int)
+            or isinstance(number, bool)
+            or not isinstance(source_id, str)
+            or not isinstance(unit_key, str)
+            or not isinstance(section_keys, list)
+            or not all(isinstance(key, str) for key in section_keys)
+        ):
+            fail(f"chapters[{index}] has invalid fields")
+        if number in chapter_numbers or source_id in chapter_source_ids:
+            fail(f"chapters[{index}] duplicates a chapter identity")
+        if unit_key in referenced_chapters:
+            fail(f"chapters[{index}] duplicates unit_key {unit_key}")
+        chapter_unit = units_by_key.get(unit_key)
+        if (
+            chapter_unit is None
+            or chapter_unit["kind"] != "chapter"
+            or chapter_unit["chapter"] != number
+            or chapter_unit["source_id"] != source_id
+        ):
+            fail(f"chapters[{index}] does not match chapter unit {unit_key}")
+        if chapter_row.get("title") != chapter_unit.get("title"):
+            fail(f"chapters[{index}] title does not match chapter unit {unit_key}")
+
+        chapter_numbers.add(number)
+        chapter_source_ids.add(source_id)
+        referenced_chapters.add(unit_key)
+        for section_key in section_keys:
+            if section_key in referenced_sections:
+                fail(f"section unit is referenced more than once: {section_key}")
+            section_unit = units_by_key.get(section_key)
+            if (
+                section_unit is None
+                or section_unit["kind"] != "section"
+                or section_unit["chapter"] != number
+            ):
+                fail(f"chapters[{index}] does not match section unit {section_key}")
+            referenced_sections.add(section_key)
+
+    if referenced_chapters != chapter_unit_keys:
+        fail("chapters do not reference every chapter unit exactly once")
+    if referenced_sections != section_unit_keys:
+        fail("chapters do not reference every section unit exactly once")
+
+    recalculated_content_hash = _snapshot_content_hash(verified_units)
+    if snapshot.get("content_hash") != recalculated_content_hash:
+        fail("content_hash does not match verified units")
+    if snapshot.get("integrity_hash") != _snapshot_integrity_hash(snapshot):
+        fail("integrity_hash does not match snapshot identity")
 
 
 def unit_map(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:

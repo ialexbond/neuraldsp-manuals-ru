@@ -19,10 +19,12 @@ class TranslationError(RuntimeError):
 
 PROTECTED_TERMS = (
     "Quad Cortex",
+    "Nano Cortex",
     "Neural Capture",
     "Cortex Cloud",
     "Cortex Control",
     "CorOS",
+    "NanOS",
     "MIDI",
     "USB",
     "XLR",
@@ -238,7 +240,10 @@ def _refresh_cover_metadata(
     edition = document.select_one(".manual-toc-edition")
     if isinstance(edition, Tag):
         edition.string = f"Русская редакция — {localized_date}"
-    for span in document.select(".manual-toc-continuation-meta span"):
+    for span in document.select(
+        ".manual-toc-continuation-meta span, "
+        ".manual-toc-continuation > span:last-child"
+    ):
         if "Редакция" in span.get_text():
             span.string = f"Редакция {localized_date}"
 
