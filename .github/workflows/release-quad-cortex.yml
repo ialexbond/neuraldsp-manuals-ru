@@ -168,7 +168,7 @@ jobs:
           tag="quad-cortex-v${version}-ru.${EDITION_DATE}"
           notes="$RUNNER_TEMP/release-notes.md"
           {
-            echo "Русская редакция руководства пользователя Neural DSP Quad Cortex версии $version."
+            echo "Полное руководство пользователя Neural DSP Quad Cortex $version на русском языке в формате PDF."
             echo
             echo "Дата редакции: $EDITION_DATE"
             echo "Официальный источник: https://neuraldsp.com/manual/quad-cortex#Global-Features"
@@ -176,11 +176,11 @@ jobs:
           } > "$notes"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$pdf" --clobber
-            gh release edit "$tag" --notes-file "$notes" --title "Quad Cortex $version — русская редакция от $EDITION_DATE"
+            gh release edit "$tag" --notes-file "$notes" --title "Quad Cortex $version — инструкция на русском языке (PDF)"
           else
             gh release create "$tag" "$pdf" \
               --target "${{ github.event.pull_request.merge_commit_sha }}" \
-              --title "Quad Cortex $version — русская редакция от $EDITION_DATE" \
+              --title "Quad Cortex $version — инструкция на русском языке (PDF)" \
               --notes-file "$notes"
           fi
 
