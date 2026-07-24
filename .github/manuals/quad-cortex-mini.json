@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "slug": "quad-cortex-mini",
+  "display_name": "Quad Cortex mini",
+  "category": "Устройство",
+  "source_url": "https://neuraldsp.com/manual/quad-cortex-mini",
+  "expected_chapter_count": 12,
+  "minimum_section_count": 67,
+  "pdf_directory": "manuals/quad-cortex-mini",
+  "pdf_name_template": "Quad_Cortex_Mini_User_Manual_RU_v{version}_rev{date}.pdf",
+  "release_tag_template": "quad-cortex-mini-v{version}-ru.{date}",
+  "maximum_changed_unit_ratio": 0.2,
+  "maximum_changed_unit_count": 15,
+  "minimum_pdf_pages": 100,
+  "maximum_pdf_page_delta_ratio": 0.12,
+  "minimum_internal_link_count": 70,
+  "playwright_version": "1.61.1"
+}

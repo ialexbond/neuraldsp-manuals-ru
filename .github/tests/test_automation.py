@@ -825,6 +825,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn(
             "Полное руководство пользователя Neural DSP $DISPLAY_NAME", workflow
         )
+        self.assertIn(
+            "releases/download/$TAG/$asset_name",
+            workflow,
+        )
+        self.assertIn("date -d \"$EDITION_DATE\" '+%d.%m.%Y'", workflow)
+        self.assertIn('sha256sum "$PDF_PATH"', workflow)
+        self.assertIn("- Русская редакция: $formatted_date", workflow)
+        self.assertIn("- Официальный источник: $SOURCE_URL", workflow)
+        self.assertIn("- SHA-256 PDF:", workflow)
+        self.assertIn(
+            "Это независимая неофициальная русская локализация.",
+            workflow,
+        )
+        self.assertNotIn("Запрос на слияние:", workflow)
         self.assertNotIn("automation-state", workflow)
         self.assertNotIn("STATE_TAG", workflow)
         self.assertNotIn("STATE_ASSET", workflow)
@@ -936,7 +950,11 @@ class WorkflowContractTests(unittest.TestCase):
         readme = (REPOSITORY / "README.md").read_text(encoding="utf-8")
 
         self.assertIn("устройств, плагинов и программ Neural DSP", readme)
-        self.assertIn("Quad Cortex** и **Nano Cortex", readme)
+        self.assertIn(
+            "Quad Cortex**, **Quad Cortex mini** и **Nano Cortex",
+            readme,
+        )
+        self.assertIn("## Руководство Quad Cortex mini", readme)
         self.assertIn("## Руководство Nano Cortex", readme)
         self.assertIn("В каталог попадают только законченные переводы", readme)
         self.assertFalse((REPOSITORY / "docs" / "AUTOMATION.md").exists())
