@@ -1,4 +1,4 @@
-name: Release merged Quad Cortex manual
+name: Выпуск объединённого руководства Quad Cortex
 
 on:
   pull_request:
@@ -26,33 +26,36 @@ env:
 
 jobs:
   release:
+    name: Публикация руководства
     if: >-
       github.event.pull_request.merged == true &&
       (startsWith(github.event.pull_request.head.ref, 'update/quad-cortex/') ||
       github.event.pull_request.head.ref == 'codex/bootstrap-quad-cortex-automation')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Получить объединённую версию репозитория
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      - uses: actions/setup-python@v7
+      - name: Настроить Python
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: .github/requirements.txt
 
-      - name: Install validation dependencies
+      - name: Установить зависимости для проверки
         run: python -m pip install -r .github/requirements.txt
 
-      - name: Revalidate the merged public files
+      - name: Повторно проверить объединённые публичные файлы
         run: |
           python .github/scripts/manual_sync.py validate-repository \
             --config "$CONFIG" \
             --repository "$GITHUB_WORKSPACE" \
             --result "$RUNNER_TEMP/merged-validation.json"
 
-      - name: Resolve the candidate state run
+      - name: Определить запуск с подготовленным состоянием
         id: metadata
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -65,23 +68,23 @@ jobs:
           if branch == "codex/bootstrap-quad-cortex-automation":
               pdfs = list(__import__("pathlib").Path("manuals/quad-cortex").glob("*.pdf"))
               if len(pdfs) != 1:
-                  raise SystemExit("Bootstrap release requires exactly one public PDF")
+                  raise SystemExit("Для первоначального выпуска требуется ровно один публичный PDF")
               date = re.search(r"_rev(\d{4}-\d{2}-\d{2})\.pdf$", pdfs[0].name)
               if not date:
-                  raise SystemExit("Bootstrap PDF filename has no edition date")
+                  raise SystemExit("В имени первоначального PDF отсутствует дата редакции")
               print("mode=bootstrap")
               print(f"edition_date={date.group(1)}")
           else:
               run = re.search(r"<!-- state-run-id: (\d+) -->", body)
               date = re.search(r"update/quad-cortex/(\d{4}-\d{2}-\d{2})$", branch)
               if not run or not date:
-                  raise SystemExit("Pull request is missing the automation state marker or dated branch name")
+                  raise SystemExit("В запросе на слияние отсутствует отметка состояния автоматизации или дата в имени ветки")
               print("mode=update")
               print(f"run_id={run.group(1)}")
               print(f"edition_date={date.group(1)}")
           PY
 
-      - name: Download the state candidate created with the PDF
+      - name: Скачать состояние, подготовленное вместе с PDF
         id: candidate
         continue-on-error: true
         run: |
@@ -97,20 +100,20 @@ jobs:
           fi
           test -f "$RUNNER_TEMP/state-candidate/$STATE_ASSET"
 
-      - name: Report an unavailable state candidate
+      - name: Сообщить о недоступности подготовленного состояния
         if: steps.candidate.outcome == 'failure'
         run: |
-          gh label create update-detected --color D93F0B --description "The official manual changed or automation needs attention" --force
-          body="The PDF was merged, but state promotion failed because its matching state archive is unavailable. Restore the state before the next scheduled check. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex automation state in:title' --json number --jq '.[0].number // empty')"
+          gh label create update-detected --color D93F0B --description "Официальное руководство изменилось или автоматизация требует внимания" --force
+          body="PDF объединён, но сохранить новое состояние не удалось: соответствующий архив недоступен. Восстановите состояние до следующей плановой проверки. Запуск: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          issue="$(gh issue list --state open --label update-detected --search 'состояние автоматизации Quad Cortex in:title' --json number --jq '.[0].number // empty')"
           if [[ -n "$issue" ]]; then
             gh issue comment "$issue" --body "$body"
           else
-            gh issue create --title "[update-detected] Quad Cortex automation state needs recovery" --label update-detected --body "$body"
+            gh issue create --title "[update-detected] Требуется восстановить состояние автоматизации Quad Cortex" --label update-detected --body "$body"
           fi
           exit 1
 
-      - name: Validate the state candidate against the merged PDF
+      - name: Сверить подготовленное состояние с объединённым PDF
         id: state_pdf
         if: steps.candidate.outcome == 'success'
         continue-on-error: true
@@ -125,20 +128,20 @@ jobs:
             --pdf "$pdf" \
             --edition-date "$EDITION_DATE"
 
-      - name: Report a state and PDF mismatch
+      - name: Сообщить о несоответствии состояния и PDF
         if: steps.candidate.outcome == 'success' && steps.state_pdf.outcome == 'failure'
         run: |
-          gh label create update-detected --color D93F0B --description "The official manual changed or automation needs attention" --force
-          body="The PDF was merged, but its candidate state failed the identity and integrity check. Neither the durable state nor a public release was updated. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          issue="$(gh issue list --state open --label update-detected --search 'Quad Cortex automation state in:title' --json number --jq '.[0].number // empty')"
+          gh label create update-detected --color D93F0B --description "Официальное руководство изменилось или автоматизация требует внимания" --force
+          body="PDF объединён, но подготовленное для него состояние не прошло проверку подлинности и целостности. Сохранённое состояние и публичный релиз не обновлены. Запуск: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          issue="$(gh issue list --state open --label update-detected --search 'состояние автоматизации Quad Cortex in:title' --json number --jq '.[0].number // empty')"
           if [[ -n "$issue" ]]; then
             gh issue comment "$issue" --body "$body"
           else
-            gh issue create --title "[update-detected] Quad Cortex automation state does not match the PDF" --label update-detected --body "$body"
+            gh issue create --title "[update-detected] Состояние автоматизации Quad Cortex не соответствует PDF" --label update-detected --body "$body"
           fi
           exit 1
 
-      - name: Promote the durable state release asset
+      - name: Сохранить новое состояние автоматизации
         if: steps.state_pdf.outcome == 'success' && steps.metadata.outputs.mode == 'update'
         run: |
           if gh release view "$STATE_TAG" >/dev/null 2>&1; then
@@ -148,42 +151,42 @@ jobs:
               "$RUNNER_TEMP/state-candidate/$STATE_ASSET" \
               --target "${{ github.event.pull_request.merge_commit_sha }}" \
               --prerelease \
-              --title "Quad Cortex automation state v1" \
-              --notes "Publicly downloadable service state used by the monthly localization workflow. It contains no secrets."
+              --title "Состояние автоматизации Quad Cortex v1" \
+              --notes "Общедоступное служебное состояние для ежемесячного обновления локализации. Секретных данных не содержит."
           fi
 
-      - name: Create the public PDF release
+      - name: Создать публичный релиз PDF
         env:
           EDITION_DATE: ${{ steps.metadata.outputs.edition_date }}
         run: |
           pdf="$(find manuals/quad-cortex -maxdepth 1 -type f -name '*.pdf' -print -quit)"
           version="$(basename "$pdf" | sed -E 's/^Quad_Cortex_User_Manual_RU_v([0-9]+\.[0-9]+\.[0-9]+)_rev[0-9]{4}-[0-9]{2}-[0-9]{2}\.pdf$/\1/')"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Cannot derive the official version from $pdf" >&2
+            echo "Не удалось определить официальную версию по имени файла $pdf" >&2
             exit 1
           fi
           tag="quad-cortex-v${version}-ru.${EDITION_DATE}"
           notes="$RUNNER_TEMP/release-notes.md"
           {
-            echo "Russian edition of the Neural DSP Quad Cortex User Manual $version."
+            echo "Русская редакция руководства пользователя Neural DSP Quad Cortex версии $version."
             echo
-            echo "Edition date: $EDITION_DATE"
-            echo "Official source: https://neuraldsp.com/manual/quad-cortex#Global-Features"
-            echo "Pull request: #${{ github.event.pull_request.number }}"
+            echo "Дата редакции: $EDITION_DATE"
+            echo "Официальный источник: https://neuraldsp.com/manual/quad-cortex#Global-Features"
+            echo "Запрос на слияние: #${{ github.event.pull_request.number }}"
           } > "$notes"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$pdf" --clobber
-            gh release edit "$tag" --notes-file "$notes" --title "Quad Cortex $version — Russian edition $EDITION_DATE"
+            gh release edit "$tag" --notes-file "$notes" --title "Quad Cortex $version — русская редакция от $EDITION_DATE"
           else
             gh release create "$tag" "$pdf" \
               --target "${{ github.event.pull_request.merge_commit_sha }}" \
-              --title "Quad Cortex $version — Russian edition $EDITION_DATE" \
+              --title "Quad Cortex $version — русская редакция от $EDITION_DATE" \
               --notes-file "$notes"
           fi
 
-      - name: Close stale-content notices
+      - name: Закрыть уведомления об устаревшем содержимом
         if: steps.state_pdf.outcome == 'success'
         run: |
-          for issue in $(gh issue list --state open --label update-detected --search 'Quad Cortex manual in:title' --json number --jq '.[].number'); do
-            gh issue close "$issue" --comment "The updated PDF was merged in #${{ github.event.pull_request.number }} and released successfully."
+          for issue in $(gh issue list --state open --label update-detected --search 'руководство Quad Cortex in:title' --json number --jq '.[].number'); do
+            gh issue close "$issue" --comment "Обновлённый PDF объединён в запросе #${{ github.event.pull_request.number }} и успешно опубликован."
           done

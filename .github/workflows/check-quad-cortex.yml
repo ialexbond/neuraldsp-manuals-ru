@@ -1,4 +1,4 @@
-name: Check Quad Cortex manual
+name: Проверка руководства Quad Cortex
 
 on:
   workflow_dispatch:
@@ -19,25 +19,25 @@ env:
 
 jobs:
   check:
-    name: Read-only comparison fallback
+    name: Резервное сравнение без изменений
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the published repository
+      - name: Получить опубликованный репозиторий
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Настроить Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: .github/requirements.txt
 
-      - name: Install comparison dependencies
+      - name: Установить зависимости для сравнения
         run: python -m pip install -r .github/requirements.txt
 
-      - name: Download the durable automation state
+      - name: Скачать сохранённое состояние автоматизации
         id: state
         continue-on-error: true
         run: |
@@ -46,16 +46,16 @@ jobs:
             --pattern "$STATE_ASSET" \
             --dir "$RUNNER_TEMP/quad-cortex/input"
 
-      - name: Report missing bootstrap state
+      - name: Сообщить об отсутствии исходного состояния
         if: steps.state.outcome == 'failure'
         run: |
-          echo "The read-only fallback could not start because the durable state asset is missing."
-          echo "Expected release: $STATE_TAG"
-          echo "Expected asset: $STATE_ASSET"
-          echo "Follow the bootstrap procedure in docs/AUTOMATION.md."
+          echo "Не удалось запустить резервную проверку без изменений: отсутствует файл сохранённого состояния."
+          echo "Ожидаемый служебный релиз: $STATE_TAG"
+          echo "Ожидаемый файл: $STATE_ASSET"
+          echo "Выполните процедуру первоначальной настройки из docs/AUTOMATION.md."
           exit 1
 
-      - name: Compare canonical manual sections
+      - name: Сравнить разделы официального руководства
         id: compare
         if: steps.state.outcome == 'success'
         continue-on-error: true
@@ -68,40 +68,52 @@ jobs:
             --report "$RUNNER_TEMP/quad-cortex/report.json"
           echo "status=$(python -c 'import json; print(json.load(open("'"$RUNNER_TEMP/quad-cortex/report.json"'", encoding="utf-8"))["status"])')" >> "$GITHUB_OUTPUT"
 
-      - name: Report an upstream comparison failure
+      - name: Сообщить об ошибке сравнения с оригиналом
         if: steps.compare.outcome == 'failure'
         run: |
-          echo "The official Quad Cortex page could not be compared with the saved baseline."
-          echo "The published PDF and state were not changed."
-          echo "This usually means that the website structure changed or the source was temporarily unavailable."
+          echo "Не удалось сравнить официальную страницу Quad Cortex с сохранённой версией."
+          echo "Опубликованный PDF и сохранённое состояние не изменены."
+          echo "Обычно это означает, что изменилась структура сайта или источник временно недоступен."
           exit 1
 
-      - name: Write the check summary
+      - name: Сформировать сводку проверки
         if: steps.compare.outcome == 'success'
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
           report = json.loads(Path(os.environ["RUNNER_TEMP"] + "/quad-cortex/report.json").read_text(encoding="utf-8"))
+          status_names = {
+              "unchanged": "изменений нет",
+              "safe_change": "обнаружено безопасное изменение",
+              "blocked": "требуется ручная проверка",
+          }
+          status = status_names.get(report["status"], report["status"])
           lines = [
-              "## Quad Cortex manual check",
+              "## Проверка руководства Quad Cortex",
               "",
-              f"- Result: **{report['status']}**",
-              f"- Official version: **{report['upstream_version']}**",
-              f"- Changed stable units: **{len(report['changed_units'])}**",
-              f"- Added units: **{len(report['added_units'])}**",
-              f"- Removed units: **{len(report['removed_units'])}**",
+              f"- Результат: **{status}**",
+              f"- Официальная версия: **{report['upstream_version']}**",
+              f"- Изменённые смысловые блоки: **{len(report['changed_units'])}**",
+              f"- Добавленные блоки: **{len(report['added_units'])}**",
+              f"- Удалённые блоки: **{len(report['removed_units'])}**",
               "",
-              "This manually triggered workflow is read-only. The local Codex automation is the only scheduled detector and updater.",
+              "Этот сценарий запускается вручную и ничего не изменяет. Только локальная автоматизация Codex регулярно проверяет и обновляет руководство.",
           ]
           if report["reasons"]:
-              lines += ["", "### Review notes", ""] + [f"- {item}" for item in report["reasons"]]
+              lines += ["", "### Примечания к проверке", ""] + [f"- {item}" for item in report["reasons"]]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
               handle.write("\n".join(lines) + "\n")
           PY
 
-      - name: Confirm read-only completion
+      - name: Подтвердить завершение без изменений
         if: steps.compare.outcome == 'success'
         run: |
-          echo "Comparison result: ${{ steps.compare.outputs.status }}"
-          echo "No translation API, issue, branch, commit, pull request, release, PDF, or durable state was changed."
+          case "${{ steps.compare.outputs.status }}" in
+            unchanged) result="изменений нет" ;;
+            safe_change) result="обнаружено безопасное изменение" ;;
+            blocked) result="требуется ручная проверка" ;;
+            *) result="${{ steps.compare.outputs.status }}" ;;
+          esac
+          echo "Результат сравнения: $result"
+          echo "API перевода не вызывался; задачи, ветки, коммиты, запросы на слияние, релизы, PDF и сохранённое состояние не изменялись."

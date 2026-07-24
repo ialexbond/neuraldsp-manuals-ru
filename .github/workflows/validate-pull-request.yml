@@ -1,4 +1,4 @@
-name: Validate pull request
+name: Проверка запроса на слияние
 
 on:
   pull_request:
@@ -17,26 +17,26 @@ env:
 
 jobs:
   validate:
-    name: Repository validation
+    name: Проверка репозитория
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the pull request
+      - name: Получить изменения из запроса на слияние
         uses: actions/checkout@v7
 
-      - name: Set up Python
+      - name: Настроить Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: .github/requirements.txt
 
-      - name: Install validation dependencies
+      - name: Установить зависимости для проверки
         run: python -m pip install -r .github/requirements.txt
 
-      - name: Run unit and workflow-contract tests
+      - name: Запустить модульные тесты и проверку сценариев
         run: python -m unittest discover -s .github/tests -v
 
-      - name: Enforce the public repository policy
+      - name: Проверить правила публичного репозитория
         run: |
           python .github/scripts/manual_sync.py validate-repository \
             --config "$CONFIG" \
