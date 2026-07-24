@@ -236,6 +236,8 @@ class RepositoryPolicyTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             self.assertIn("4.1.0", content)
             self.assertIn("2026-08-23", content)
+            self.assertIn("Русская редакция", content)
+            self.assertIn("Актуально, автоматические проверки пройдены", content)
             self.assertNotIn("\nold\n", content)
 
     def test_manual_directory_rejects_non_pdf_files(self) -> None:
@@ -307,7 +309,7 @@ class WorkflowContractTests(unittest.TestCase):
             REPOSITORY / ".github" / "workflows" / "validate-pull-request.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("pull_request:", workflow)
-        self.assertIn("name: Repository validation", workflow)
+        self.assertIn("name: Проверка репозитория", workflow)
         self.assertIn("python -m unittest discover -s .github/tests -v", workflow)
         self.assertIn("validate-repository", workflow)
         self.assertIn("contents: read", workflow)
@@ -317,25 +319,30 @@ class WorkflowContractTests(unittest.TestCase):
         documentation = (REPOSITORY / "docs" / "AUTOMATION.md").read_text(encoding="utf-8")
 
         self.assertIn(
-            "local Codex automation is the **only automatic scheduler and source-change detector**",
+            "Локальная автоматизация Codex — **единственный автоматический планировщик и источник проверки изменений**",
             readme,
         )
-        self.assertIn("existing Codex plan", readme)
-        self.assertIn("does not use `OPENAI_API_KEY`", readme)
-        self.assertIn("has no schedule", readme)
+        self.assertIn("действующего плана Codex пользователя", readme)
+        self.assertIn(
+            "`OPENAI_API_KEY` и отдельно оплачиваемый API перевода не используются",
+            readme,
+        )
+        self.assertIn("не запускается по расписанию", readme)
 
         self.assertIn(
-            "local Codex automation is the **only automatic scheduler and source-change detector**",
+            "Локальная автоматизация Codex — **единственный автоматический планировщик и единственная система, которая отслеживает изменения оригинала**",
             documentation,
         )
-        self.assertIn("diagnostic backup only", documentation)
-        self.assertIn("exactly one trigger: `workflow_dispatch`", documentation)
-        self.assertIn("does **not** use `OPENAI_API_KEY`", documentation)
-        self.assertIn("separately billed translation API", documentation)
+        self.assertIn("только резервный диагностический инструмент", documentation)
+        self.assertIn("ровно один способ запуска: `workflow_dispatch`", documentation)
+        self.assertIn("**не использует** `OPENAI_API_KEY`", documentation)
+        self.assertIn("отдельно оплачиваемый API перевода", documentation)
         self.assertNotIn("60 days", documentation)
+        self.assertNotIn("60 дней", documentation)
         self.assertIn("$env:PYTHONUTF8='1'", documentation)
         self.assertIn(
-            "Human review and an explicit merge are mandatory", documentation
+            "Перед публикацией обязательны проверка человеком и явное принятие запроса на слияние",
+            documentation,
         )
 
 

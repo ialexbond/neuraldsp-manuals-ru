@@ -1,34 +1,38 @@
-# Neural DSP manuals in Russian
+# Руководства Neural DSP на русском
 
-[![Quad Cortex manual check](https://github.com/ialexbond/neuraldsp-manuals-ru/actions/workflows/check-quad-cortex.yml/badge.svg?branch=main)](https://github.com/ialexbond/neuraldsp-manuals-ru/actions/workflows/check-quad-cortex.yml)
+[![Проверка руководства Quad Cortex](https://github.com/ialexbond/neuraldsp-manuals-ru/actions/workflows/check-quad-cortex.yml/badge.svg?branch=main)](https://github.com/ialexbond/neuraldsp-manuals-ru/actions/workflows/check-quad-cortex.yml)
 
-Carefully formatted Russian editions of official Neural DSP manuals. The manual directory intentionally publishes only the current PDF for each product; source snapshots, translation memory, images, and build files are kept outside that directory.
+Полноценные русские локализации официальных руководств Neural DSP с сохранением структуры, иллюстраций, навигации и оформления. Для каждого продукта в репозитории хранится только один актуальный PDF; исходные снимки сайта, память переводов, изображения и промежуточные файлы рядом с руководством не публикуются.
 
-## Current manuals
+## Актуальные руководства
 
 <!-- MANUAL_STATUS:START -->
-| Product | Upstream manual | Russian edition | Status | Download |
+| Продукт | Оригинал | Русская редакция | Статус | Скачать |
 | --- | --- | --- | --- | --- |
-| Quad Cortex | 4.0.0 | 2026-07-23 | Current at the initial automation baseline | [PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf) |
+| Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex#Global-Features) | 2026-07-23 | Актуально, автоматические проверки пройдены | [PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf) |
 <!-- MANUAL_STATUS:END -->
 
-The badge above shows the result of the latest **manually requested GitHub backup check**. It is not a monthly-status indicator. The regular update history belongs to the local Codex automation. An open issue with the [`update-detected`](https://github.com/ialexbond/neuraldsp-manuals-ru/issues?q=is%3Aissue+is%3Aopen+label%3Aupdate-detected) label means either that an update was detected or that the automation needs attention. Read the issue before deciding whether the PDF is outdated.
+Все опубликованные редакции доступны на странице [релизов](https://github.com/ialexbond/neuraldsp-manuals-ru/releases).
 
-## File and release versioning
+Значок над описанием показывает результат последней **вручную запущенной резервной проверки на GitHub**. Это не индикатор ежемесячной проверки. Основная история регулярных проверок ведётся локальной автоматизацией Codex. Открытая задача с меткой [`update-detected`](https://github.com/ialexbond/neuraldsp-manuals-ru/issues?q=is%3Aissue+is%3Aopen+label%3Aupdate-detected) означает, что найдено обновление оригинала либо автоматизации требуется внимание. Перед выводом о неактуальности PDF следует прочитать эту задачу.
 
-- Exactly one current PDF is kept in `manuals/quad-cortex/`.
-- Its name is `Quad_Cortex_User_Manual_RU_v<official-version>_rev<YYYY-MM-DD>.pdf`.
-- A corrected Russian edition removes the prior filename and replaces it with the new dated revision, never creating a second current copy.
-- Every published revision also has a GitHub Release tagged `quad-cortex-v<official-version>-ru.<YYYY-MM-DD>`. Release tags preserve the Russian revision history without cluttering the manual directory.
+## Версии файлов и релизов
 
-## Update policy
+- В `manuals/quad-cortex/` хранится ровно один актуальный PDF.
+- Имя файла имеет вид `Quad_Cortex_User_Manual_RU_v<версия-оригинала>_rev<ГГГГ-ММ-ДД>.pdf`.
+- Исправленная русская редакция заменяет прежний файл новой датированной версией, поэтому рядом никогда не лежат две «актуальные» копии.
+- Каждая опубликованная редакция также получает релиз GitHub с тегом `quad-cortex-v<версия-оригинала>-ru.<ГГГГ-ММ-ДД>`. Релизы сохраняют историю редакций, не захламляя папку руководства.
 
-The local Codex automation is the **only automatic scheduler and source-change detector**. On the 23rd day of every month it checks the official [Quad Cortex manual](https://neuraldsp.com/manual/quad-cortex#Global-Features), compares stable chapter and section identifiers after presentation-only markup is removed, and records the result in its Codex task.
+## Как проверяются обновления
 
-When nothing changed, no branch, commit, pull request, or release is created. For a safe text-only change, the same Codex automation translates only the changed material using the user's existing Codex plan, rebuilds and validates the complete PDF, and prepares an `update/quad-cortex/YYYY-MM-DD` branch with a **draft** pull request. It does not use `OPENAI_API_KEY` or any separately billed translation API. Human review and an explicit merge are mandatory before publication. Section additions, removals, layout changes, unexpectedly large updates, or failed PDF checks stop publication for human review.
+Локальная автоматизация Codex — **единственный автоматический планировщик и источник проверки изменений**. 23-го числа каждого месяца она открывает официальное [руководство Quad Cortex](https://neuraldsp.com/manual/quad-cortex#Global-Features), сравнивает устойчивые идентификаторы глав и разделов после удаления косметической разметки сайта и записывает результат в задачу Codex.
 
-`.github/workflows/check-quad-cortex.yml` has no schedule. It can be started explicitly from GitHub Actions as a diagnostic backup, but it neither translates nor publishes an update. Its run history only describes manual backup checks; it is not the authoritative monthly log.
+Если оригинал не изменился, автоматизация не создаёт ветку, коммит, запрос на слияние или релиз. При безопасном изменении только текста она переводит лишь изменённые фрагменты в рамках действующего плана Codex пользователя, заново собирает и полностью проверяет PDF, а затем готовит ветку `update/quad-cortex/YYYY-MM-DD` и черновой запрос на слияние.
 
-The current single-repository design stores durable automation state as a dedicated prerelease asset. That ZIP is outside `manuals/quad-cortex/`, contains no credentials, and is publicly downloadable because this repository is public. Public manual releases contain the PDF; the state prerelease exists only to support future comparisons and rebuilds.
+`OPENAI_API_KEY` и отдельно оплачиваемый API перевода не используются. Перед публикацией обязательны ручная проверка и явное принятие запроса на слияние. Добавление или удаление разделов, крупное изменение структуры, слишком большой объём правок либо ошибка проверки PDF останавливают автоматическую публикацию и требуют участия человека.
 
-Implementation, recovery, and first-run instructions are documented in [docs/AUTOMATION.md](docs/AUTOMATION.md).
+Сценарий `.github/workflows/check-quad-cortex.yml` не запускается по расписанию. Его можно включить вручную в GitHub Actions как резервную диагностику, но он не переводит текст и не публикует обновления. История его запусков относится только к ручным резервным проверкам и не является основным ежемесячным журналом.
+
+Служебное состояние автоматизации хранится отдельным предварительным релизом. ZIP-архив находится вне `manuals/quad-cortex/`, не содержит учётных данных и нужен только для последующих сравнений и пересборок. Обычные публичные релизы содержат готовый PDF.
+
+Подробное устройство автоматизации, восстановление и первоначальная настройка описаны в [документации](docs/AUTOMATION.md).

@@ -82,15 +82,17 @@ def update_readme(
 ) -> None:
     content = readme_path.read_text(encoding="utf-8")
     if content.count(STATUS_START) != 1 or content.count(STATUS_END) != 1:
-        raise RepositoryPolicyError("README status markers are missing or duplicated.")
+        raise RepositoryPolicyError(
+            "Служебные маркеры таблицы статуса в README отсутствуют или дублируются."
+        )
     block = "\n".join(
         [
             STATUS_START,
-            "| Product | Upstream manual | Russian edition | Status | Download |",
+            "| Продукт | Оригинал | Русская редакция | Статус | Скачать |",
             "| --- | --- | --- | --- | --- |",
             (
                 f"| Quad Cortex | [{version}]({source_url}) | {edition_date} | "
-                f"Current after automated validation | [PDF]({pdf_path}) |"
+                f"Актуально, автоматические проверки пройдены | [PDF]({pdf_path}) |"
             ),
             STATUS_END,
         ]

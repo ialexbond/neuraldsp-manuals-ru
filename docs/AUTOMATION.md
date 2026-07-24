@@ -1,108 +1,108 @@
-# Quad Cortex localization automation
+# Автоматическое обновление локализации Quad Cortex
 
-This document describes the update process for the Russian Quad Cortex manual. The publication rule is deliberately strict: `manuals/quad-cortex/` contains exactly one current PDF and nothing else.
+В этом документе описано, как обновляется русская версия руководства Quad Cortex. Для публикации действует строгое правило: в каталоге `manuals/quad-cortex/` всегда должен находиться ровно один актуальный PDF-файл и больше ничего.
 
-## Ownership and schedule
+## Ответственность и расписание
 
-The local Codex automation is the **only automatic scheduler and source-change detector**. It runs on the 23rd day of every month at 10:00 in the maintainer's local time zone and owns the complete routine update cycle:
+Локальная автоматизация Codex — **единственный автоматический планировщик и единственная система, которая отслеживает изменения оригинала**. Она запускается 23-го числа каждого месяца в 10:00 по местному времени ответственного за репозиторий и выполняет весь стандартный цикл обновления:
 
-1. fetch the official manual;
-2. compare it with the accepted source snapshot;
-3. translate only confirmed changed material;
-4. rebuild and validate the complete PDF;
-5. prepare a dated branch and draft pull request for human review.
+1. загружает официальное руководство;
+2. сравнивает его с принятой исходной версией;
+3. переводит только подтверждённые изменения;
+4. заново собирает и полностью проверяет PDF;
+5. подготавливает датированную ветку и черновой запрос на слияние для проверки человеком.
 
-The scheduled task is managed in the Codex app, not in a GitHub workflow. Its execution history and result are recorded in the corresponding Codex task. If the computer or Codex task is unavailable at the scheduled time, the maintainer starts that automation manually when the environment is available again; the next comparison still uses full canonical hashes, so no source change is lost.
+Задача по расписанию настраивается в приложении Codex, а не в GitHub Actions. История её запусков и результаты сохраняются в соответствующей задаче Codex. Если в назначенное время компьютер выключен или задача Codex недоступна, ответственный запускает автоматизацию вручную, когда рабочая среда снова становится доступна. При следующем сравнении всё равно используются полные канонические хеши — цифровые отпечатки очищенного содержимого, — поэтому ни одно изменение оригинала не будет пропущено.
 
-Translation uses the maintainer's existing Codex plan. The project does **not** use `OPENAI_API_KEY`, `OPENAI_MODEL`, or any separately billed translation API. No paid API credential is required in GitHub or in the repository files.
+Для перевода используется действующая подписка ответственного в Codex. Проект **не использует** `OPENAI_API_KEY`, `OPENAI_MODEL` или какой-либо отдельно оплачиваемый API перевода. Ни в GitHub, ни в файлах репозитория не требуется платный ключ API.
 
-## Manual GitHub backup check
+## Резервная ручная проверка в GitHub
 
-`.github/workflows/check-quad-cortex.yml` is a diagnostic backup only. It has exactly one trigger: `workflow_dispatch`, which means a maintainer must start it explicitly from **Actions → Check Quad Cortex manual → Run workflow**.
+`.github/workflows/check-quad-cortex.yml` — только резервный диагностический инструмент. У него ровно один способ запуска: `workflow_dispatch`. Ответственный должен открыть раздел **Actions → Проверка руководства Quad Cortex**, нажать кнопку **Run workflow** («Запустить сценарий») и подтвердить запуск.
 
-The manual workflow downloads the durable state, fetches the official page, compares canonical hashes, and reports whether the source is unchanged, safely changed, structurally changed, or unavailable. It does not translate text, render or publish a replacement PDF, create an update branch, or open an update pull request. It has no `schedule` or cron trigger and is not a watchdog for the Codex automation.
+Этот сценарий загружает сохранённое состояние, получает официальную страницу, сравнивает её цифровые отпечатки и сообщает один из четырёх результатов: оригинал не изменился, обнаружено безопасное изменение, изменилась структура или источник недоступен. Он не переводит текст, не собирает и не публикует новый PDF, не создаёт ветку обновления и не открывает запрос на слияние. У него нет запуска по `schedule` или cron, и он не следит за работой автоматизации Codex.
 
-No repository secret is needed for this backup check. It uses read-only repository access and writes its result only to the GitHub Actions run summary. A manual workflow run may help diagnose a problem, but it never replaces the monthly Codex task.
+Для этой резервной проверки не нужны секреты репозитория. Она использует доступ к репозиторию только для чтения и записывает результат исключительно в сводку запуска GitHub Actions. Ручной запуск может помочь разобраться в проблеме, но он никогда не заменяет ежемесячную задачу Codex.
 
-## Codex end-to-end flow
+## Полный цикл работы Codex
 
-1. Download `quad-cortex-state-v1.zip` from the prerelease tagged `automation-state-quad-cortex-v1`.
-2. Download the official [Quad Cortex manual](https://neuraldsp.com/manual/quad-cortex#Global-Features).
-3. Extract the 12 chapter introductions and the main `div[id]` sections beneath them.
-4. Canonicalize the content. Styled-component class names, formatting whitespace, tracking query parameters, and image resizing parameters are ignored. Text, semantic element order, links, image sources, image alternative text, list structure, and table structure remain significant.
-5. Compare each stable unit hash with the saved source snapshot.
-6. Finish without repository changes when every hash is unchanged.
-7. Stop for human review when a stable unit was added or removed, a semantic tree changed, the chapter or section count is implausible, or the update exceeds the configured size limit.
-8. For a safe change, translate only changed text nodes through the local Codex task. Each changed section is considered with its title, previous English text, and previous Russian text so terminology stays consistent. Reject a translation if it loses numbers, protected product or protocol names, IDs, or the exact inline-markup structure.
-9. Apply translated fragments to the saved localized HTML, preserve unchanged Russian text byte-for-byte, download changed image assets into the external state, and update the edition date.
-10. Render with the same pinned Node Playwright 1.61.1 toolchain used for the accepted edition, derive every table-of-contents destination from the preview PDF's internal links, fill the visible page numbers, and render the tagged final PDF with bookmarks.
-11. Validate A4 geometry, page count, visible content on every page, chapter openers, image loading, text bounds and overlaps, links, bookmarks, PDF tags, searchable Cyrillic text, visible table-of-contents page numbers, and exact embedded IBM Plex Sans metrics.
-12. Create or refresh `update/quad-cortex/YYYY-MM-DD`, replace the sole PDF, update the README status row, and open a draft pull request.
-13. Preserve the candidate state until the pull request is reviewed and merged.
-14. After a maintainer merges the pull request, `.github/workflows/release-quad-cortex.yml` verifies that the candidate archive belongs to the merged PDF, promotes that exact archive to the durable state release, and creates the public PDF release.
+1. Загрузить `quad-cortex-state-v1.zip` из предварительного релиза с тегом `automation-state-quad-cortex-v1`.
+2. Загрузить официальное [руководство Quad Cortex](https://neuraldsp.com/manual/quad-cortex#Global-Features).
+3. Извлечь вводные части 12 глав и расположенные под ними основные разделы `div[id]`.
+4. Привести содержимое к каноническому виду. При этом игнорируются имена классов styled-components, пробелы, влияющие только на форматирование, отслеживающие параметры запросов и параметры изменения размера изображений. Значимыми остаются текст, смысловой порядок элементов, ссылки, адреса изображений, альтернативный текст изображений, структура списков и таблиц.
+5. Сравнить хеш каждой стабильной единицы содержимого — отдельной главы или раздела, которые можно надёжно сопоставлять между версиями, — с сохранённым снимком оригинала.
+6. Завершить работу без изменений в репозитории, если все хеши совпадают.
+7. Остановиться и передать обновление на проверку человеку, если стабильная единица была добавлена или удалена, изменилась структура значимых HTML-элементов, количество глав или разделов выглядит неправдоподобно либо объём обновления превысил заданный предел.
+8. Если изменение безопасно, перевести через локальную задачу Codex только изменившиеся текстовые узлы. Каждый изменённый раздел рассматривается вместе с его заголовком, прежним английским текстом и прежним русским переводом, чтобы сохранить единообразие терминов. Перевод отклоняется, если в нём потеряны числа, защищённые названия продуктов или протоколов, идентификаторы либо точная структура встроенной разметки.
+9. Применить переведённые фрагменты к сохранённому локализованному HTML, оставить неизменившийся русский текст без каких-либо побайтовых изменений, загрузить изменившиеся изображения во внешнее хранилище состояния и обновить дату редакции.
+10. Собрать документ тем же закреплённым набором инструментов Node Playwright 1.61.1, который использовался для принятой редакции. Получить все цели содержания из внутренних ссылок предварительного PDF, подставить видимые номера страниц и собрать окончательный PDF с тегами и закладками.
+11. Проверить формат A4, количество страниц, наличие видимого содержимого на каждой странице, начало глав, загрузку изображений, границы и наложения текста, ссылки, закладки, теги PDF, возможность поиска кириллического текста, видимые номера страниц в содержании и точные характеристики встроенного шрифта IBM Plex Sans.
+12. Создать или обновить ветку `update/quad-cortex/YYYY-MM-DD`, заменить единственный PDF, обновить строку состояния в README и открыть черновой запрос на слияние.
+13. Сохранить состояние кандидата до тех пор, пока запрос на слияние не будет проверен и принят.
+14. После того как ответственный примет запрос на слияние, `.github/workflows/release-quad-cortex.yml` проверит, что архив кандидата соответствует объединённому PDF, перенесёт именно этот архив в постоянное хранилище состояния и создаст публичный релиз PDF.
 
-The update process never pushes directly to `main`. Human review and an explicit merge are mandatory before publication.
+Процесс обновления никогда не отправляет изменения напрямую в `main`. Перед публикацией обязательны проверка человеком и явное принятие запроса на слияние.
 
-## Change classifications
+## Виды изменений
 
-### Unchanged
+### Изменений нет
 
-No stable unit hash or upstream version changed. The Codex task records the successful comparison and exits. README is intentionally not committed merely to advance a check date.
+Ни хеш стабильной единицы, ни версия оригинала не изменились. Задача Codex записывает результат успешного сравнения и завершается. README намеренно не обновляется только ради новой даты проверки.
 
-### Safe change
+### Безопасное изменение
 
-The same stable units and semantic element trees exist, and the number of changed units remains within `.github/manuals/quad-cortex.json` limits. The local Codex task translates only changed text, rebuilds the whole manual, runs all safeguards, and prepares a dated draft pull request.
+Набор стабильных единиц и их смысловые деревья не изменились, а количество изменившихся единиц не превышает ограничения из `.github/manuals/quad-cortex.json`. Локальная задача Codex переводит только изменившийся текст, заново собирает всё руководство, выполняет все проверки и подготавливает датированный черновой запрос на слияние.
 
-### Blocked change
+### Заблокированное изменение
 
-Publication stops when the site structure, stable section set, or content volume changes beyond safe limits. The existing PDF and durable state remain untouched. Codex reports the reason to the maintainer. The manual GitHub backup check can independently confirm the comparison result but cannot translate or publish the update.
+Публикация останавливается, если структура сайта, набор стабильных разделов или объём содержимого изменились сильнее, чем допускают безопасные пределы. Существующий PDF и постоянное состояние остаются нетронутыми. Codex сообщает ответственному причину остановки. Резервная ручная проверка в GitHub может независимо подтвердить результат сравнения, но не может перевести или опубликовать обновление.
 
-Changing a threshold merely to force a structurally different document through is not a valid fix. Update the extractor or print template locally, rebuild and inspect the complete PDF, and create a new state schema when necessary.
+Простое изменение порогового значения ради принудительной обработки документа с новой структурой не считается допустимым решением. Необходимо локально обновить модуль извлечения данных или шаблон печати, заново собрать и проверить весь PDF, а при необходимости создать новую версию схемы состояния.
 
-## Why state is stored as a release asset
+## Почему состояние хранится в файле релиза
 
-The next build needs more than the public PDF: it needs the canonical English snapshot, localized HTML, translation alignment, fonts, and images. Committing those files would make the public repository noisy and would violate the one-PDF manual-directory rule.
+Для следующей сборки недостаточно публичного PDF. Нужны канонический снимок английского оригинала, локализованный HTML, соответствия между исходным текстом и переводом, шрифты и изображения. Если хранить всё это в репозитории, он будет засорён служебными файлами, а правило об одном PDF в каталоге руководства окажется нарушено.
 
-The durable archive is therefore an asset on a dedicated prerelease:
+Поэтому постоянный архив состояния хранится как файл отдельного предварительного релиза:
 
-- tag: `automation-state-quad-cortex-v1`
-- asset: `quad-cortex-state-v1.zip`
-- schema: `state.json`, `web/document.html`, and `assets/`
+- тег: `automation-state-quad-cortex-v1`
+- файл: `quad-cortex-state-v1.zip`
+- схема: `state.json`, `web/document.html` и `assets/`
 
-The release asset is mutable but the schema version is explicit. A candidate is not promoted until the matching PDF pull request is merged. This prevents an unsuccessful or rejected localization from becoming the comparison baseline.
+Файл релиза можно заменять, но версия его схемы указана явно. Состояние кандидата не становится постоянным, пока соответствующий запрос на слияние с PDF не будет принят. Благодаря этому неудачная или отклонённая локализация не станет новой точкой отсчёта для сравнений.
 
-The state archive contains no API keys or other credentials. It is publicly downloadable because the repository is public, so it must not contain confidential material.
+В архиве состояния нет ключей API или других учётных данных. Поскольку репозиторий публичный, этот архив может скачать любой пользователь, поэтому в нём не должно быть конфиденциальных материалов.
 
-## Repository secrets and settings
+## Секреты и настройки репозитория
 
-No user-provided repository secret is required for source checking or translation. In particular:
+Для проверки оригинала и перевода не требуются секреты репозитория, предоставленные пользователем. В частности:
 
-- do not add `OPENAI_API_KEY`;
-- do not add `OPENAI_MODEL`;
-- do not configure another paid translation service.
+- не добавляйте `OPENAI_API_KEY`;
+- не добавляйте `OPENAI_MODEL`;
+- не подключайте другой платный сервис перевода.
 
-GitHub workflows use the built-in `GITHUB_TOKEN` where repository access is required. In **Settings → Actions → General → Workflow permissions**, allow the permissions required by the diagnostic and release workflows. Repository branch protection must require a pull request for `main`; an explicit human merge is the mandatory final publication gate.
+Когда сценариям GitHub Actions нужен доступ к репозиторию, они используют встроенный `GITHUB_TOKEN`. В разделе **Settings → Actions → General → Workflow permissions** необходимо разрешить доступ, который требуется диагностическому сценарию и сценарию создания релиза. В правилах защиты ветки `main` нужно обязательно требовать запрос на слияние: явное принятие человеком служит последним обязательным этапом публикации.
 
-Recommended branch protection:
+Рекомендуемые правила защиты ветки:
 
-- require pull requests before merging;
-- require the `Repository validation` check from `.github/workflows/validate-pull-request.yml`;
-- disallow force pushes to `main`;
-- keep branch deletion after merge enabled for `update/quad-cortex/*` branches.
+- требовать запрос на слияние перед объединением изменений;
+- требовать успешную проверку `Проверка репозитория` из `.github/workflows/validate-pull-request.yml`;
+- запретить принудительную отправку изменений в `main`;
+- оставить включённым удаление веток `update/quad-cortex/*` после слияния.
 
-## First bootstrap
+## Первоначальная подготовка
 
-Bootstrap is a one-time local operation because the completed localized HTML and its assets intentionally do not live in the repository.
+Первоначальная подготовка выполняется локально один раз, поскольку готовый локализованный HTML и связанные с ним файлы намеренно не хранятся в репозитории.
 
-1. Make sure the current PDF is at `manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf` and the matching completed build files are available locally.
-2. Install the pinned Python dependencies:
+1. Убедитесь, что текущий PDF находится по пути `manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf`, а соответствующие файлы завершённой сборки доступны локально.
+2. Установите закреплённые версии зависимостей Python:
 
    ```powershell
    $env:PYTHONUTF8='1'
    python -m pip install -r .github/requirements.txt
    ```
 
-3. Create the archive from the completed edition:
+3. Создайте архив из готовой редакции:
 
    ```powershell
    $env:PYTHONUTF8='1'
@@ -116,10 +116,10 @@ Bootstrap is a one-time local operation because the completed localized HTML and
      --result ".automation\bootstrap-result.json"
    ```
 
-   Bootstrap refuses to continue unless every source unit has an equivalent semantic tree in the localized HTML.
+   Первоначальная подготовка будет остановлена, если хотя бы одной единице исходного содержимого не соответствует равнозначное смысловое дерево в локализованном HTML.
 
-4. Inspect `bootstrap-result.json`. It must report 12 chapters, at least 60 main sections, successful alignment, and plausible PDF metrics.
-5. Upload the durable state asset after the initial repository commit exists:
+4. Проверьте `bootstrap-result.json`. В нём должны быть указаны 12 глав, не менее 60 основных разделов, успешное сопоставление и правдоподобные характеристики PDF.
+5. После создания первого коммита репозитория загрузите файл постоянного состояния:
 
    ```powershell
    $env:PYTHONUTF8='1'
@@ -127,77 +127,77 @@ Bootstrap is a one-time local operation because the completed localized HTML and
      ".automation\quad-cortex-state-v1.zip" `
      --target main `
      --prerelease `
-     --title "Quad Cortex automation state v1" `
-     --notes "Public service state used by the local Codex automation and manual diagnostic workflow. It contains no secrets."
+     --title "Служебное состояние автоматизации Quad Cortex v1" `
+     --notes "Служебный архив состояния для локальной автоматизации Codex и ручной диагностики. Секретных данных не содержит."
    ```
 
-6. Run a manual GitHub backup check or the local comparison command below. A baseline check must finish as `unchanged` and must not create a branch. No API key setup is part of bootstrap.
+6. Запустите резервную ручную проверку в GitHub или приведённую ниже локальную команду сравнения. Результатом исходной проверки должно быть состояние `unchanged`, при этом новая ветка создаваться не должна. Для первоначальной подготовки ключ API не нужен.
 
-If Neural DSP does not expose a reliable modification date, the baseline fetch time becomes the initial known source date. Later source-change dates are the dates on which Codex first detects a new canonical hash; they are not presented as the publisher's exact edit time.
+Если Neural DSP не сообщает достоверную дату изменения, временем исходного снимка считается момент его загрузки. В дальнейшем датой изменения оригинала считается день, когда Codex впервые обнаружил новый канонический хеш. Эта дата не выдаётся за точное время правки, сделанной издателем.
 
-## PDF and repository safeguards
+## Защита PDF и репозитория
 
-Before an update branch is pushed, the local Codex automation verifies:
+Перед отправкой ветки обновления локальная автоматизация Codex проверяет следующее:
 
-- the renderer is the pinned Node Playwright 1.61.1 toolchain used by the accepted build;
-- all images loaded before printing;
-- every page is A4, contains visible content, and renders successfully;
-- the first visible central content on every page begins no lower than 90 pt from the top, counting text, images, rules, callouts, and vector drawings;
-- every chapter starts on a new page with its title and substantive content together;
-- page count remains within the configured tolerance of the previous edition;
-- no text block leaves the page or materially overlaps another text block;
-- the PDF remains tagged and every bookmark resolves;
-- only the four expected IBM Plex Sans faces are embedded, with exact advance widths and global metrics;
-- every visible table-of-contents page number equals its actual link destination;
-- `manuals/quad-cortex/` contains one file, it is a PDF, and its name matches the official version;
-- repository publication changes are limited to the intended PDF and status metadata.
+- для сборки используется закреплённый набор инструментов Node Playwright 1.61.1, применявшийся при создании принятой версии;
+- перед печатью загрузились все изображения;
+- каждая страница имеет формат A4, содержит видимое содержимое и успешно отрисовывается;
+- первое видимое содержимое в центральной области каждой страницы начинается не ниже 90 pt от верхнего края; при этом учитываются текст, изображения, линии, выделенные блоки и векторные рисунки;
+- каждая глава начинается с новой страницы, причём её заголовок и основной текст находятся вместе;
+- количество страниц не отклоняется от предыдущей редакции сильнее, чем допускают настройки;
+- ни один текстовый блок не выходит за пределы страницы и существенно не накладывается на другой текстовый блок;
+- PDF сохраняет теги, а каждая закладка ведёт в существующее место;
+- встроены только четыре ожидаемых начертания IBM Plex Sans с точной шириной символов и общими характеристиками;
+- каждый видимый номер страницы в содержании совпадает с фактической целью соответствующей ссылки;
+- в `manuals/quad-cortex/` находится один файл, он имеет формат PDF, а его имя соответствует официальной версии;
+- изменения для публикации в репозитории ограничиваются нужным PDF и сведениями о его состоянии.
 
-Any failure leaves `main`, the durable state asset, and public releases unchanged.
+При любой ошибке ветка `main`, файл постоянного состояния и публичные релизы остаются без изменений.
 
-## Pull requests, releases, and naming
+## Запросы на слияние, релизы и правила именования
 
-- Working branch: `update/quad-cortex/YYYY-MM-DD`
-- Published file: `Quad_Cortex_User_Manual_RU_v<official-version>_rev<YYYY-MM-DD>.pdf`
-- Public release tag: `quad-cortex-v<official-version>-ru.<YYYY-MM-DD>`
+- рабочая ветка: `update/quad-cortex/<ГГГГ-ММ-ДД>`
+- публикуемый файл: `Quad_Cortex_User_Manual_RU_v<версия-оригинала>_rev<ГГГГ-ММ-ДД>.pdf`
+- тег публичного релиза: `quad-cortex-v<версия-оригинала>-ru.<ГГГГ-ММ-ДД>`
 
-The official version and Russian edition date are both kept in the filename. Every update starts as a draft pull request. The `Repository validation` check runs the unit suite and enforces the one-PDF publication policy. A maintainer must inspect the translated changes and rendered PDF, mark the pull request ready, and explicitly merge it. Passing automation is necessary but never substitutes for human review.
+В имени файла сохраняются и официальная версия, и дата русской редакции. Каждое обновление сначала оформляется как черновой запрос на слияние. Проверка `Проверка репозитория` запускает набор автоматических тестов и следит за соблюдением правила об одном публикуемом PDF. Ответственный должен проверить изменения перевода и собранный PDF, пометить запрос как готовый и явно принять его. Успешная автоматическая проверка обязательна, но не заменяет проверку человеком.
 
-## Recovery and failure handling
+## Восстановление после ошибок
 
-### The monthly Codex task did not run
+### Ежемесячная задача Codex не запустилась
 
-Open the local Codex automation and start it manually. Do not add a GitHub cron as a workaround. Optionally run the manual GitHub backup check first to confirm whether the source changed.
+Откройте локальную автоматизацию Codex и запустите её вручную. Не добавляйте в качестве обходного решения расписание GitHub cron. При необходимости сначала запустите резервную ручную проверку в GitHub, чтобы узнать, изменился ли оригинал.
 
-### The manual GitHub backup reports a change
+### Резервная ручная проверка GitHub обнаружила изменение
 
-Do not attempt to translate inside GitHub Actions. Start the local Codex automation and let it perform the complete comparison, translation, rebuild, and review workflow.
+Не пытайтесь переводить текст внутри GitHub Actions. Запустите локальную автоматизацию Codex: она выполнит полное сравнение, перевод, повторную сборку и подготовку обновления к проверке.
 
-### The state release or asset is missing
+### Отсутствует релиз состояния или его файл
 
-Recreate the archive from the last verified localized build or restore a previously downloaded release asset, then upload it to the expected state release. The current PDF remains untouched.
+Заново создайте архив из последней проверенной локализованной сборки либо восстановите ранее загруженный файл релиза, а затем загрузите его в ожидаемый релиз состояния. Текущий PDF при этом не изменяется.
 
-### The Codex update was interrupted
+### Обновление Codex было прервано
 
-Resume or restart the same Codex task. It must compare against the last accepted state and rerun full PDF validation before proposing a branch. No external API key is needed.
+Продолжите или перезапустите ту же задачу Codex. Она должна выполнить сравнение с последним принятым состоянием и заново провести полную проверку PDF, прежде чем предложить ветку. Внешний ключ API не нужен.
 
-### PDF validation failed
+### PDF не прошёл проверку
 
-Inspect the changed sections and every page affected by pagination. Structural or layout repairs require a human-reviewed template update and a fresh state archive. Never publish a PDF that only passed a partial page check.
+Проверьте изменившиеся разделы и все страницы, на которые повлияло новое разбиение текста. Исправление структуры или вёрстки требует проверенного человеком обновления шаблона и нового архива состояния. Никогда не публикуйте PDF, прошедший лишь частичную проверку страниц.
 
-### PDF merged but state promotion failed
+### PDF принят, но обновить постоянное состояние не удалось
 
-Recover the state candidate that was built with the merged PDF, validate their matching identities and hashes, upload it to `automation-state-quad-cortex-v1`, and rerun the release workflow. Do not substitute a state archive from another build.
+Восстановите состояние кандидата, созданное вместе с принятым PDF, проверьте совпадение их идентификаторов и хешей, загрузите его в `automation-state-quad-cortex-v1` и перезапустите сценарий релиза. Не подменяйте его архивом состояния из другой сборки.
 
-## Local test and diagnostic commands
+## Локальные команды для тестирования и диагностики
 
-Run unit tests without contacting GitHub or a paid API:
+Запуск автоматических тестов без обращения к GitHub или платному API:
 
 ```powershell
 $env:PYTHONUTF8='1'
 python -m unittest discover -s .github/tests -v
 ```
 
-Create a live source snapshot for diagnosis:
+Создание актуального снимка оригинала для диагностики:
 
 ```powershell
 $env:PYTHONUTF8='1'
@@ -206,7 +206,7 @@ python .github/scripts/manual_sync.py snapshot `
   --output .automation/live-snapshot.json
 ```
 
-Compare a downloaded state archive without translating or rendering:
+Сравнение загруженного архива состояния без перевода и сборки:
 
 ```powershell
 $env:PYTHONUTF8='1'
