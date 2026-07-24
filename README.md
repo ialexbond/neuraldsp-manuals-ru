@@ -11,7 +11,7 @@
 <!-- MANUAL_STATUS:START -->
 | Категория | Продукт | Версия оригинала | Русская редакция | Статус | Скачать |
 | --- | --- | --- | --- | --- | --- |
-| Устройство | Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex#Global-Features) | 23.07.2026 | Опубликовано | [Скачать PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf?raw=1) |
+| Устройство | Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex) | 23.07.2026 | Опубликовано | [Скачать PDF](manuals/quad-cortex/Quad_Cortex_User_Manual_RU_v4.0.0_rev2026-07-23.pdf?raw=1) |
 <!-- MANUAL_STATUS:END -->
 
 Все опубликованные редакции также доступны на [странице релизов](https://github.com/ialexbond/neuraldsp-manuals-ru/releases).

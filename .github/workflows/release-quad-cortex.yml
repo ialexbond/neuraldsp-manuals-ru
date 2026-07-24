@@ -153,7 +153,7 @@ jobs:
             echo "Полное руководство пользователя Neural DSP Quad Cortex $version на русском языке в формате PDF."
             echo
             echo "Дата редакции: $EDITION_DATE"
-            echo "Официальный источник: https://neuraldsp.com/manual/quad-cortex#Global-Features"
+            echo "Официальный источник: https://neuraldsp.com/manual/quad-cortex"
             echo "Запрос на слияние: #${{ github.event.pull_request.number }}"
           } > "$notes"
           if gh release view "$tag" >/dev/null 2>&1; then

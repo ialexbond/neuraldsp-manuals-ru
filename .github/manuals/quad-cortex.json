@@ -3,7 +3,7 @@
   "slug": "quad-cortex",
   "display_name": "Quad Cortex",
   "category": "Устройство",
-  "source_url": "https://neuraldsp.com/manual/quad-cortex#Global-Features",
+  "source_url": "https://neuraldsp.com/manual/quad-cortex",
   "expected_chapter_count": 12,
   "minimum_section_count": 60,
   "state_release_tag": "automation-state-quad-cortex-v1",
