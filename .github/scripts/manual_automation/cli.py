@@ -236,19 +236,283 @@ def command_bootstrap(args: argparse.Namespace) -> int:
 
 def command_check(args: argparse.Namespace) -> int:
     config = _config(args.config)
-    work_directory = _clean_work_directory(
-        args.work_directory, "check", str(config["slug"])
+    report = _check_manual(
+        config=config,
+        state_archive=Path(args.state_archive).resolve(),
+        source=args.source,
+        work_directory=Path(args.work_directory),
+        snapshot_output=Path(args.snapshot_output).resolve(),
     )
-    state_directory = work_directory / "state"
-    state = unpack_state(Path(args.state_archive).resolve(), state_directory)
-    _validate_state_manual(state, config)
-    candidate = extract_snapshot(
-        args.source or config["source_url"], config["expected_chapter_count"]
-    )
-    report = classify_change(state["snapshot"], candidate, config)
-    write_json(Path(args.snapshot_output).resolve(), candidate)
     _write_result(report, args.report)
     return 0
+
+
+def _check_manual(
+    *,
+    config: dict[str, Any],
+    state_archive: Path,
+    source: str | None,
+    work_directory: Path,
+    snapshot_output: Path,
+) -> dict[str, Any]:
+    work_directory = _clean_work_directory(
+        str(work_directory), "check", str(config["slug"])
+    )
+    state_directory = work_directory / "state"
+    state = unpack_state(state_archive, state_directory)
+    _validate_state_manual(state, config)
+    candidate = extract_snapshot(
+        source or config["source_url"], config["expected_chapter_count"]
+    )
+    report = classify_change(state["snapshot"], candidate, config)
+    write_json(snapshot_output, candidate)
+    return report
+
+
+def _prepare_failed_check_directory(work_directory: Path, slug: str) -> None:
+    cleaned = _clean_work_directory(str(work_directory), "check", slug)
+    cleaned.mkdir(parents=True, exist_ok=True)
+
+
+def _check_error(
+    *,
+    error_kind: str,
+    message: str,
+    config_path: Path,
+    state_archive: Path | None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "error",
+        "error_kind": error_kind,
+        "error": message,
+        "config": str(config_path),
+    }
+    if state_archive is not None:
+        result["state_archive"] = str(state_archive)
+    return result
+
+
+def _state_pdf_summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = {
+        key: report[key]
+        for key in (
+            "status",
+            "pdf_path",
+            "edition_date",
+            "error_kind",
+            "error",
+        )
+        if key in report
+    }
+    metrics = report.get("pdf")
+    if isinstance(metrics, dict):
+        summary["pdf"] = {
+            key: metrics[key]
+            for key in (
+                "sha256",
+                "page_count",
+                "file_size",
+                "internal_link_count",
+            )
+            if key in metrics
+        }
+    return summary
+
+
+def command_check_all(args: argparse.Namespace) -> int:
+    config_directory = Path(args.config_directory).resolve()
+    automation_directory = Path(args.automation_directory).resolve()
+    repository = Path(args.repository).resolve()
+    config_paths = sorted(config_directory.glob("*.json"))
+    discovered: list[dict[str, Any]] = []
+
+    for config_path in config_paths:
+        try:
+            config = read_json(config_path)
+            slug = config.get("slug")
+            if not isinstance(slug, str) or not slug:
+                raise RuntimeError("Manual configuration has no valid slug.")
+            catalog_order = int(config.get("catalog_order", 1_000_000))
+            discovered.append(
+                {
+                    "catalog_order": catalog_order,
+                    "slug": slug,
+                    "config_path": config_path,
+                    "config": config,
+                    "config_error": None,
+                }
+            )
+        except Exception as exc:
+            discovered.append(
+                {
+                    "catalog_order": 1_000_000,
+                    "slug": config_path.stem,
+                    "config_path": config_path,
+                    "config": None,
+                    "config_error": str(exc),
+                }
+            )
+
+    discovered.sort(key=lambda item: (item["catalog_order"], item["slug"]))
+    duplicate_slugs = {
+        item["slug"]
+        for item in discovered
+        if sum(other["slug"] == item["slug"] for other in discovered) > 1
+    }
+    manuals: list[dict[str, Any]] = []
+    technical_failure = False
+    changes_detected = False
+
+    for item in discovered:
+        slug = str(item["slug"])
+        config_path = Path(item["config_path"])
+        state_archive = automation_directory / f"{slug}-state-v1.zip"
+        work_directory = automation_directory / slug / "check"
+        snapshot_path = work_directory / "snapshot.json"
+        report_path = work_directory / "report.json"
+        state_pdf_report_path = work_directory / "state-pdf-report.json"
+        base_result: dict[str, Any] = {
+            "slug": slug,
+            "catalog_order": item["catalog_order"],
+            "config": str(config_path),
+            "state_archive": str(state_archive),
+            "snapshot": str(snapshot_path),
+            "report": str(report_path),
+            "state_pdf_report": str(state_pdf_report_path),
+        }
+
+        error_kind: str | None = None
+        error_message: str | None = None
+        if item["config_error"] is not None:
+            error_kind = "invalid_config"
+            error_message = str(item["config_error"])
+        elif slug in duplicate_slugs:
+            error_kind = "duplicate_slug"
+            error_message = f"More than one configuration uses slug {slug!r}."
+        elif not state_archive.is_file():
+            error_kind = "missing_state_archive"
+            error_message = f"State archive does not exist: {state_archive}"
+
+        if error_kind is not None and error_message is not None:
+            technical_failure = True
+            try:
+                _prepare_failed_check_directory(work_directory, slug)
+                error_report = _check_error(
+                    error_kind=error_kind,
+                    message=error_message,
+                    config_path=config_path,
+                    state_archive=state_archive,
+                )
+                write_json(report_path, error_report)
+                manuals.append({**base_result, **error_report})
+            except Exception as exc:
+                manuals.append(
+                    {
+                        **base_result,
+                        "status": "error",
+                        "error_kind": error_kind,
+                        "error": f"{error_message} Failed to write check report: {exc}",
+                    }
+                )
+            continue
+
+        config = item["config"]
+        try:
+            state_pdf_report = _validate_published_state(
+                repository=repository,
+                config=config,
+                state_archive=state_archive,
+            )
+        except Exception as exc:
+            technical_failure = True
+            state_pdf_report = {
+                "schema_version": 1,
+                "status": "error",
+                "error_kind": "state_pdf_mismatch",
+                "error": str(exc),
+            }
+        try:
+            report = _check_manual(
+                config=config,
+                state_archive=state_archive,
+                source=None,
+                work_directory=work_directory,
+                snapshot_output=snapshot_path,
+            )
+            write_json(report_path, report)
+            write_json(state_pdf_report_path, state_pdf_report)
+            report_status = report.get("status")
+            if report_status == "unchanged":
+                pass
+            elif report_status in {
+                "safe_change",
+                "review_required",
+                "blocked",
+            }:
+                changes_detected = True
+            else:
+                raise RuntimeError(
+                    f"Unexpected check report status for {slug}: {report_status!r}"
+                )
+            manuals.append(
+                {
+                    **base_result,
+                    "display_name": config.get("display_name", slug),
+                    "status": report_status,
+                    "state_pdf": _state_pdf_summary(state_pdf_report),
+                }
+            )
+        except Exception as exc:
+            technical_failure = True
+            error_report = _check_error(
+                error_kind="check_failed",
+                message=str(exc),
+                config_path=config_path,
+                state_archive=state_archive,
+            )
+            try:
+                work_directory.mkdir(parents=True, exist_ok=True)
+                write_json(report_path, error_report)
+                write_json(state_pdf_report_path, state_pdf_report)
+            except Exception as write_exc:
+                error_report["error"] += (
+                    f" Failed to write check report: {write_exc}"
+                )
+            manuals.append(
+                {
+                    **base_result,
+                    **error_report,
+                    "state_pdf": _state_pdf_summary(state_pdf_report),
+                }
+            )
+
+    top_level_errors: list[str] = []
+    if not config_paths:
+        technical_failure = True
+        top_level_errors.append(
+            f"No manual configuration files were found in {config_directory}."
+        )
+
+    if technical_failure:
+        overall_status = "blocked"
+    elif changes_detected:
+        overall_status = "changes_detected"
+    else:
+        overall_status = "unchanged"
+    result = {
+        "schema_version": 1,
+        "status": overall_status,
+        "config_directory": str(config_directory),
+        "automation_directory": str(automation_directory),
+        "repository": str(repository),
+        "manual_count": len(manuals),
+        "manuals": manuals,
+    }
+    if top_level_errors:
+        result["errors"] = top_level_errors
+    _write_result(result, args.result)
+    return 1 if technical_failure else 0
 
 
 def command_update(args: argparse.Namespace) -> int:
@@ -358,12 +622,25 @@ def command_validate(args: argparse.Namespace) -> int:
 
 def command_validate_state_pdf(args: argparse.Namespace) -> int:
     config = _config(args.config)
-    pdf_path = Path(args.pdf).resolve()
-    edition_date = args.edition_date
+    result = _validate_state_pdf_archive(
+        config=config,
+        state_archive=Path(args.state_archive).resolve(),
+        pdf_path=Path(args.pdf).resolve(),
+        edition_date=args.edition_date,
+    )
+    _write_result(result, args.result)
+    return 0
+
+
+def _validate_state_pdf_archive(
+    *,
+    config: dict[str, Any],
+    state_archive: Path,
+    pdf_path: Path,
+    edition_date: str,
+) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="manual-state-validate-") as temporary:
-        state = unpack_state(
-            Path(args.state_archive).resolve(), Path(temporary) / "state"
-        )
+        state = unpack_state(state_archive, Path(temporary) / "state")
         _validate_state_manual(state, config)
     version = state["snapshot"]["upstream_version"]
     expected_name = expected_pdf_name(config, version, edition_date)
@@ -394,16 +671,36 @@ def command_validate_state_pdf(args: argparse.Namespace) -> int:
             "Candidate state does not match the merged PDF: "
             + json.dumps(mismatches, ensure_ascii=False, sort_keys=True)
         )
-    _write_result(
-        {
-            "status": "matching",
-            "pdf": actual,
-            "source_hash": state["snapshot"]["content_hash"],
-            "edition_date": edition_date,
-        },
-        args.result,
+    return {
+        "status": "matching",
+        "pdf": actual,
+        "source_hash": state["snapshot"]["content_hash"],
+        "edition_date": edition_date,
+    }
+
+
+def _validate_published_state(
+    *,
+    repository: Path,
+    config: dict[str, Any],
+    state_archive: Path,
+) -> dict[str, Any]:
+    pdf_directory = repository / str(config["pdf_directory"])
+    pdf_files = sorted(pdf_directory.glob("*.pdf"))
+    if len(pdf_files) != 1:
+        raise RuntimeError(
+            f"Expected exactly one published PDF in {pdf_directory}, "
+            f"found {len(pdf_files)}."
+        )
+    pdf_path = pdf_files[0].resolve()
+    _, edition_date = parse_pdf_name(config, pdf_path.name)
+    result = _validate_state_pdf_archive(
+        config=config,
+        state_archive=state_archive,
+        pdf_path=pdf_path,
+        edition_date=edition_date,
     )
-    return 0
+    return {"pdf_path": str(pdf_path), **result}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -441,6 +738,15 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--snapshot-output", required=True)
     check.add_argument("--report", required=True)
     check.set_defaults(handler=command_check)
+
+    check_all = subparsers.add_parser(
+        "check-all", help="Compare every configured manual with its saved state"
+    )
+    check_all.add_argument("--config-directory", required=True)
+    check_all.add_argument("--automation-directory", required=True)
+    check_all.add_argument("--repository", default=".")
+    check_all.add_argument("--result")
+    check_all.set_defaults(handler=command_check_all)
 
     update = subparsers.add_parser(
         "update", help="Translate, render, and validate a safe change"
