@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate** и **Mantra**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra** и **Archetype: Misha Mansoor X**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -26,6 +26,7 @@
 | Плагин | Archetype: John Mayer X | [1.1.0](https://neuraldsp.com/manual/archetype-john-mayer-x) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-john-mayer-x-v1.1.0-ru.2026-07-25) |
 | Плагин | Darkglass Ultimate | [1.0.1](https://neuraldsp.com/manual/darkglass-ultimate) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/darkglass-ultimate-v1.0.1-ru.2026-07-25) |
 | Плагин | Mantra | [1.1.1](https://neuraldsp.com/manual/mantra) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/mantra-v1.1.1-ru.2026-07-25) |
+| Плагин | Archetype: Misha Mansoor X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-misha-mansoor-x-installers/Archetype%20Misha%20Mansoor%20X%20v1.0.0.pdf) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-misha-mansoor-x-v1.0.0-ru.2026-07-25) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -86,6 +87,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Mantra на русском языке:
 
 **[Открыть актуальный релиз Mantra →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/mantra-v1.1.1-ru.2026-07-25)**
+
+## Руководство Archetype: Misha Mansoor X
+
+Русская инструкция к плагину Neural DSP Archetype: Misha Mansoor X 1.0.0 охватывает Special FX, Pre Effects, усилители, Cab, EQ и Post Effects, а также пресеты, тюнер, метроном, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Misha Mansoor X на русском языке:
+
+**[Открыть актуальный релиз Archetype: Misha Mansoor X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-misha-mansoor-x-v1.0.0-ru.2026-07-25)**
 
 ## Что публикуется в репозитории
 

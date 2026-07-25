@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import time
@@ -8,8 +9,9 @@ import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
+import fitz
 import requests
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
@@ -190,6 +192,29 @@ def _load_source(source: str, timeout: int = 60) -> tuple[str, str]:
     raise RuntimeError(f"Unable to download {request_url}: {error}") from error
 
 
+def _load_binary_source(source: str, timeout: int = 60) -> tuple[bytes, str]:
+    candidate = Path(source)
+    if candidate.exists():
+        return candidate.read_bytes(), candidate.resolve().as_uri()
+
+    request_url = source.split("#", 1)[0]
+    headers = {
+        "User-Agent": "neuraldsp-manuals-ru/1.0 (+https://github.com/ialexbond/neuraldsp-manuals-ru)",
+        "Accept": "application/pdf",
+    }
+    error: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = requests.get(request_url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            return response.content, response.url
+        except requests.RequestException as exc:
+            error = exc
+            if attempt < 2:
+                time.sleep(2**attempt)
+    raise RuntimeError(f"Unable to download {request_url}: {error}") from error
+
+
 def _manual_url_identity(value: str, base_url: str = "") -> str:
     normalized = normalize_url(value, base_url)
     parsed = urlsplit(normalized)
@@ -234,6 +259,52 @@ def resolve_plugin_version(
                 return None
             match = re.search(r"\b(\d+\.\d+\.\d+)\b", version_name)
             return match.group(1) if match else None
+    except Exception:
+        return None
+    return None
+
+
+def resolve_manual_source(
+    catalog_url: str, product_title: str, product_slug: str | None = None
+) -> str | None:
+    try:
+        html_source, resolved_url = _load_source(catalog_url)
+        soup = BeautifulSoup(html_source, "html.parser")
+        next_data = soup.select_one("script#__NEXT_DATA__")
+        if not isinstance(next_data, Tag):
+            return None
+        raw_payload = next_data.string or next_data.get_text()
+        payload = json.loads(raw_payload)
+        plugins = payload["props"]["pageProps"]["plugins"]
+        if not isinstance(plugins, list):
+            return None
+        expected_title = normalize_text(product_title).casefold()
+        expected_slug = normalize_text(product_slug or "").casefold()
+        matches: list[str] = []
+        for plugin in plugins:
+            if not isinstance(plugin, dict):
+                continue
+            title = plugin.get("title")
+            slug = plugin.get("slug")
+            title_matches = (
+                isinstance(title, str)
+                and normalize_text(title).casefold() == expected_title
+            )
+            slug_matches = (
+                bool(expected_slug)
+                and isinstance(slug, str)
+                and normalize_text(slug).casefold() == expected_slug
+            )
+            if expected_slug and not slug_matches:
+                continue
+            if not expected_slug and not title_matches:
+                continue
+            manual_link = plugin.get("manualLink")
+            if not isinstance(manual_link, str) or not manual_link.strip():
+                return None
+            matches.append(normalize_url(manual_link, resolved_url))
+        if len(matches) == 1:
+            return matches[0]
     except Exception:
         return None
     return None
@@ -384,6 +455,188 @@ def extract_snapshot(
         "page_title": page_title,
         "chapter_count": len(chapters),
         "section_count": sum(len(chapter["section_keys"]) for chapter in chapters),
+        "content_hash": _snapshot_content_hash(units),
+        "chapters": chapters,
+        "units": units,
+    }
+    snapshot["integrity_hash"] = _snapshot_integrity_hash(snapshot)
+    return snapshot
+
+
+def _pdf_source_id(title: str, fallback: str) -> str:
+    normalized = unicodedata.normalize("NFKD", title)
+    ascii_title = normalized.encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"[^a-z0-9]+", "-", ascii_title.casefold()).strip("-")
+    return value or fallback
+
+
+def extract_pdf_snapshot(
+    source: str,
+    expected_chapters: int | None = None,
+    source_version_fallback: str | None = None,
+) -> dict[str, Any]:
+    pdf_bytes, resolved_url = _load_binary_source(source)
+    binary_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+    try:
+        document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as exc:
+        raise SourceFormatError("The upstream source is not a readable PDF document.") from exc
+
+    with document:
+        page_count = document.page_count
+        outline = [
+            (int(row[0]), normalize_text(str(row[1])), int(row[2]))
+            for row in document.get_toc(simple=True)
+            if len(row) >= 3
+        ]
+        top_level = [row for row in outline if row[0] == 1]
+        if expected_chapters is not None and len(top_level) != expected_chapters:
+            raise SourceFormatError(
+                f"Expected {expected_chapters} PDF chapters, but the upstream "
+                f"document contains {len(top_level)} top-level bookmarks."
+            )
+        if not top_level:
+            raise SourceFormatError(
+                "The upstream PDF no longer contains top-level bookmarks."
+            )
+        if any(not 1 <= page <= page_count for _, _, page in outline):
+            raise SourceFormatError(
+                "The upstream PDF contains a bookmark outside its page range."
+            )
+
+        metadata = document.metadata or {}
+        page_title = normalize_text(str(metadata.get("title") or ""))
+        if not page_title:
+            page_title = Path(unquote(urlsplit(resolved_url).path)).stem
+        version_match = None
+        if page_count:
+            version_match = re.search(
+                r"\b(\d+\.\d+\.\d+)\b",
+                normalize_text(document[0].get_text("text")),
+            )
+        if version_match is None:
+            version_match = re.search(r"\b(\d+\.\d+\.\d+)\b", page_title)
+        if version_match:
+            version = version_match.group(1)
+        elif isinstance(source_version_fallback, str) and normalize_text(
+            source_version_fallback
+        ):
+            version = normalize_text(source_version_fallback)
+        else:
+            version = "unknown"
+
+        chapter_rows: list[dict[str, Any]] = []
+        chapter_ids: set[str] = set()
+        for number, (_, title, start_page) in enumerate(top_level, start=1):
+            source_id = _pdf_source_id(title, f"chapter-{number:02d}")
+            if source_id in chapter_ids:
+                source_id = f"{source_id}-{number:02d}"
+            chapter_ids.add(source_id)
+            chapter_rows.append(
+                {
+                    "number": number,
+                    "source_id": source_id,
+                    "title": title,
+                    "start_page": start_page,
+                    "section_keys": [],
+                }
+            )
+
+        units: list[dict[str, Any]] = []
+        outline_payload = json.dumps(outline, ensure_ascii=False, separators=(",", ":"))
+        for chapter in chapter_rows:
+            details = (
+                f"<p>PDF SHA-256: {binary_sha256}</p>"
+                f"<p>Pages: {page_count}</p>"
+                f"<p>Outline: {html.escape(outline_payload)}</p>"
+                if chapter["number"] == 1
+                else ""
+            )
+            source_html = (
+                f'<section><h2>{html.escape(chapter["title"])}</h2>'
+                f"<p>Starts on page {chapter['start_page']}</p>{details}</section>"
+            )
+            fragment = BeautifulSoup(source_html, "html.parser").section
+            if fragment is None:
+                raise SourceFormatError("Unable to build a canonical PDF chapter.")
+            payload = semantic_payload(fragment, resolved_url)
+            unit_key = f"chapter:{chapter['source_id']}"
+            chapter["unit_key"] = unit_key
+            units.append(
+                {
+                    "key": unit_key,
+                    "kind": "chapter",
+                    "chapter": chapter["number"],
+                    "source_id": chapter["source_id"],
+                    "title": chapter["title"],
+                    "source_html": source_html,
+                    "source_html_sha256": _source_html_sha256(source_html),
+                    **payload,
+                }
+            )
+
+        for page_number in range(1, page_count + 1):
+            chapter_index = 0
+            for index, chapter in enumerate(chapter_rows):
+                if chapter["start_page"] <= page_number:
+                    chapter_index = index
+                else:
+                    break
+            chapter = chapter_rows[chapter_index]
+            page = document[page_number - 1]
+            page_text = normalize_text(page.get_text("text"))
+            links = [
+                {
+                    "kind": int(link.get("kind", 0)),
+                    "page": link.get("page"),
+                    "uri": normalize_url(str(link.get("uri") or ""), resolved_url),
+                }
+                for link in page.get_links()
+            ]
+            source_id = f"page-{page_number:03d}"
+            source_html = (
+                f"<section><h3>Page {page_number}</h3>"
+                f"<p>Images: {len(page.get_images(full=True))}</p>"
+                f"<p>Links: {html.escape(json.dumps(links, ensure_ascii=False, sort_keys=True))}</p>"
+                f"<pre>{html.escape(page_text)}</pre></section>"
+            )
+            fragment = BeautifulSoup(source_html, "html.parser").section
+            if fragment is None:
+                raise SourceFormatError("Unable to build a canonical PDF page.")
+            payload = semantic_payload(fragment, resolved_url)
+            key = f"section:{source_id}"
+            units.append(
+                {
+                    "key": key,
+                    "kind": "section",
+                    "chapter": chapter["number"],
+                    "source_id": source_id,
+                    "title": f"Page {page_number}",
+                    "source_html": source_html,
+                    "source_html_sha256": _source_html_sha256(source_html),
+                    **payload,
+                }
+            )
+            chapter["section_keys"].append(key)
+
+    chapters = [
+        {
+            "number": chapter["number"],
+            "source_id": chapter["source_id"],
+            "title": chapter["title"],
+            "unit_key": chapter["unit_key"],
+            "section_keys": chapter["section_keys"],
+        }
+        for chapter in chapter_rows
+    ]
+    snapshot = {
+        "schema_version": 1,
+        "source_url": resolved_url,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "upstream_version": version,
+        "page_title": page_title,
+        "chapter_count": len(chapters),
+        "section_count": page_count,
         "content_hash": _snapshot_content_hash(units),
         "chapters": chapters,
         "units": units,

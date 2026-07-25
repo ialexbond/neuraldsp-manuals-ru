@@ -74,8 +74,17 @@ def classify_change(
         )
 
     metadata_changed = baseline.get("upstream_version") != candidate.get("upstream_version")
-    if not changed and not metadata_changed and not added and not removed:
+    source_url_changed = baseline.get("source_url") != candidate.get("source_url")
+    has_changes = bool(
+        changed or metadata_changed or source_url_changed or added or removed
+    )
+    if not has_changes:
         status = "unchanged"
+    elif config.get("source_kind") == "pdf" or config.get("monitor_only"):
+        reasons.append(
+            "the source uses monitor-only mode and requires a manually reviewed translation"
+        )
+        status = "review_required"
     elif reasons:
         status = "blocked"
     else:
@@ -86,6 +95,7 @@ def classify_change(
         "status": status,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "source_url": candidate.get("source_url"),
+        "source_url_changed": source_url_changed,
         "baseline_version": baseline.get("upstream_version"),
         "upstream_version": candidate.get("upstream_version"),
         "baseline_hash": baseline.get("content_hash"),

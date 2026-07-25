@@ -23,11 +23,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
 
 from manual_automation.canonical import (  # noqa: E402
+    extract_pdf_snapshot,
     extract_snapshot,
+    resolve_manual_source,
     resolve_plugin_version,
+    validate_snapshot_integrity,
 )
 from manual_automation.cli import (  # noqa: E402
     _extract_configured_snapshot,
+    command_update,
     command_validate,
 )
 from manual_automation.diffing import classify_change  # noqa: E402
@@ -111,6 +115,24 @@ class ChapterOpenerAuditTests(unittest.TestCase):
         self.assertTrue(audit["valid"])
         self.assertEqual(8, audit["chapter_count"])
 
+    def test_top_level_bookmarks_can_define_preserved_pdf_chapters(self) -> None:
+        with fitz.open() as document:
+            toc = []
+            for chapter_number in range(1, 6):
+                page = document.new_page()
+                title = f"Chapter {chapter_number}"
+                page.insert_text((72, 72), f"{title}\nSubstantive content.")
+                toc.append([1, title, chapter_number])
+            document.set_toc(toc)
+            audit = _chapter_opener_audit(
+                document,
+                expected_chapter_count=5,
+                chapter_mode="top_level_bookmarks",
+            )
+
+        self.assertTrue(audit["valid"])
+        self.assertEqual(5, audit["chapter_count"])
+
 
 class PdfMetricsTests(unittest.TestCase):
     def test_white_drawing_is_blank_but_black_drawing_is_not(self) -> None:
@@ -182,6 +204,52 @@ class PdfValidationTests(unittest.TestCase):
 
         self.assertTrue(result["valid"])
         mocked_metrics.assert_called_once_with(pdf_path, font_directory, 2)
+
+    def test_repository_validation_uses_pdf_specific_chapter_count(self) -> None:
+        pdf_path = Path("manual.pdf")
+        config = {
+            **self.CONFIG,
+            "expected_pdf_chapter_count": 5,
+            "pdf_chapter_mode": "top_level_bookmarks",
+        }
+        with patch(
+            "manual_automation.pdf.pdf_metrics",
+            return_value=copy.deepcopy(self.VALID_METRICS),
+        ) as mocked_metrics:
+            result = validate_pdf(
+                pdf_path,
+                None,
+                config,
+                font_directory=Path("reference-fonts"),
+            )
+
+        self.assertTrue(result["valid"])
+        mocked_metrics.assert_called_once_with(
+            pdf_path,
+            Path("reference-fonts"),
+            5,
+            chapter_mode="top_level_bookmarks",
+        )
+
+    def test_preserved_source_layout_accepts_original_font_and_block_geometry(
+        self,
+    ) -> None:
+        metrics = copy.deepcopy(self.VALID_METRICS)
+        metrics["fonts"] = {"valid": False}
+        metrics["text_block_overlaps"] = [{"page": 3}]
+        config = {
+            **self.CONFIG,
+            "pdf_validation_profile": "preserved_source_layout",
+        }
+        with patch("manual_automation.pdf.pdf_metrics", return_value=metrics):
+            result = validate_pdf(
+                Path("manual.pdf"),
+                None,
+                config,
+                font_directory=Path("reference-fonts"),
+            )
+
+        self.assertTrue(result["valid"])
 
     def test_every_repository_pdf_invariant_is_enforced(self) -> None:
         invalid_cases = {
@@ -810,6 +878,117 @@ class CanonicalizationTests(unittest.TestCase):
         self.assertEqual([], report["changed_units"])
         self.assertEqual("1.1.0", report["baseline_version"])
         self.assertEqual("1.2.0", report["upstream_version"])
+
+    def test_pdf_snapshot_uses_bookmarks_and_page_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "manual-v9.9.9.pdf"
+            with fitz.open() as document:
+                toc = []
+                for number in range(1, 6):
+                    page = document.new_page()
+                    page.insert_text(
+                        (72, 72),
+                        f"Chapter {number}\nVersion 2.3.4\nPage content {number}",
+                    )
+                    toc.append([1, f"Chapter {number}", number])
+                document.set_toc(toc)
+                document.save(source)
+
+            snapshot = extract_pdf_snapshot(
+                str(source),
+                expected_chapters=5,
+                source_version_fallback="1.0.0",
+            )
+            validate_snapshot_integrity(snapshot)
+
+        self.assertEqual("2.3.4", snapshot["upstream_version"])
+        self.assertEqual(5, snapshot["chapter_count"])
+        self.assertEqual(5, snapshot["section_count"])
+        self.assertEqual(
+            ["section:page-001"],
+            snapshot["chapters"][0]["section_keys"],
+        )
+
+    def test_pdf_manual_source_is_resolved_by_stable_catalog_slug(self) -> None:
+        payload = {
+            "props": {
+                "pageProps": {
+                    "plugins": [
+                        {
+                            "title": "Changed display title",
+                            "slug": "example-plugin",
+                            "manualLink": "https://downloads.example/manual-v2.pdf",
+                        }
+                    ]
+                }
+            }
+        }
+        html_source = (
+            "<!doctype html><html><body>"
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps(payload)
+            + "</script></body></html>"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary) / "downloads.html"
+            catalog.write_text(html_source, encoding="utf-8")
+            resolved = resolve_manual_source(
+                str(catalog),
+                "Old display title",
+                "example-plugin",
+            )
+
+        self.assertEqual(
+            "https://downloads.example/manual-v2.pdf",
+            resolved,
+        )
+
+    def test_pdf_source_changes_require_manual_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshots = []
+            for name, body in (("baseline.pdf", "Original"), ("candidate.pdf", "Changed")):
+                source = root / name
+                with fitz.open() as document:
+                    page = document.new_page()
+                    page.insert_text((72, 72), f"Version 1.0.0\n{body}")
+                    document.set_toc([[1, "Manual", 1]])
+                    document.save(source)
+                snapshots.append(
+                    extract_pdf_snapshot(
+                        str(source),
+                        expected_chapters=1,
+                        source_version_fallback="1.0.0",
+                    )
+                )
+        config = {
+            "expected_chapter_count": 1,
+            "minimum_section_count": 1,
+            "maximum_changed_unit_count": 8,
+            "maximum_changed_unit_ratio": 1.0,
+            "monitor_only": True,
+        }
+        report = classify_change(snapshots[0], snapshots[1], config)
+
+        self.assertEqual("review_required", report["status"])
+        self.assertIn("monitor-only", " ".join(report["reasons"]))
+
+    def test_pdf_monitor_cannot_enter_automatic_update(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "slug": "example",
+                        "source_kind": "pdf",
+                        "monitor_only": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(config=str(config_path))
+            with self.assertRaisesRegex(RuntimeError, "monitor-only"):
+                command_update(args)
 
 
 class TranslationMergeTests(unittest.TestCase):
