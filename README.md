@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini** и **Nano Cortex**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагина **Archetype: John Mayer X**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -23,6 +23,7 @@
 | Устройство | Quad Cortex | [4.0.0](https://neuraldsp.com/manual/quad-cortex) | 23.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/quad-cortex-v4.0.0-ru.2026-07-23) |
 | Устройство | Quad Cortex mini | [4.0.0](https://neuraldsp.com/manual/quad-cortex-mini) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/quad-cortex-mini-v4.0.0-ru.2026-07-25) |
 | Устройство | Nano Cortex | [2.2.0](https://neuraldsp.com/manual/nano-cortex) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/nano-cortex-v2.2.0-ru.2026-07-25) |
+| Плагин | Archetype: John Mayer X | [1.1.0](https://neuraldsp.com/manual/archetype-john-mayer-x) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-john-mayer-x-v1.1.0-ru.2026-07-25) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -59,6 +60,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Nano Cortex на русском языке:
 
 **[Открыть актуальный релиз Nano Cortex →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/nano-cortex-v2.2.0-ru.2026-07-25)**
+
+## Руководство Archetype: John Mayer X
+
+Русская инструкция к плагину Neural DSP Archetype: John Mayer X 1.1.0 охватывает эффекты до усилителя, реверберацию и тремоло, усилитель, акустический кабинет, эквалайзер и компрессор, эффекты после усилителя, пресеты, тюнер, метроном, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: John Mayer X на русском языке:
+
+**[Открыть актуальный релиз Archetype: John Mayer X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-john-mayer-x-v1.1.0-ru.2026-07-25)**
 
 ## Что публикуется в репозитории
 

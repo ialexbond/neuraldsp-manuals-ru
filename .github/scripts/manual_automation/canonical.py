@@ -190,6 +190,55 @@ def _load_source(source: str, timeout: int = 60) -> tuple[str, str]:
     raise RuntimeError(f"Unable to download {request_url}: {error}") from error
 
 
+def _manual_url_identity(value: str, base_url: str = "") -> str:
+    normalized = normalize_url(value, base_url)
+    parsed = urlsplit(normalized)
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, path, parsed.query, "")
+    )
+
+
+def resolve_plugin_version(
+    version_source_url: str, manual_source_url: str
+) -> str | None:
+    try:
+        html, resolved_url = _load_source(version_source_url)
+        soup = BeautifulSoup(html, "html.parser")
+        next_data = soup.select_one("script#__NEXT_DATA__")
+        if not isinstance(next_data, Tag):
+            return None
+        raw_payload = next_data.string or next_data.get_text()
+        payload = json.loads(raw_payload)
+        plugins = payload["props"]["pageProps"]["plugins"]
+        if not isinstance(plugins, list):
+            return None
+
+        expected_manual = _manual_url_identity(manual_source_url)
+        for plugin in plugins:
+            if not isinstance(plugin, dict):
+                continue
+            manual_link = plugin.get("manualLink")
+            if not isinstance(manual_link, str) or (
+                _manual_url_identity(manual_link, resolved_url) != expected_manual
+            ):
+                continue
+            releases = plugin.get("releases")
+            if not isinstance(releases, list) or not releases:
+                return None
+            release = releases[0]
+            if not isinstance(release, dict):
+                return None
+            version_name = release.get("pcVersionName")
+            if not isinstance(version_name, str):
+                return None
+            match = re.search(r"\b(\d+\.\d+\.\d+)\b", version_name)
+            return match.group(1) if match else None
+    except Exception:
+        return None
+    return None
+
+
 def _chapter_number(heading: Tag, fallback: int) -> int:
     text = normalize_text(heading.get_text(" ", strip=True))
     match = re.match(r"^(?:0\s*)?(\d{1,2})\b", text)
@@ -201,13 +250,14 @@ def _chapter_title(heading: Tag) -> str:
     return re.sub(r"^(?:0\s*)?\d{1,2}\s*", "", text).strip()
 
 
-def _find_main_sections(article: Tag) -> list[Tag]:
+def _find_main_sections(
+    article: Tag, include_unheaded_sections: bool = False
+) -> list[Tag]:
     sections: list[Tag] = []
     for candidate in article.find_all("div", id=True):
         if candidate.find_parent("article") is not article:
             continue
-        heading = candidate.find(["h3", "h2"])
-        if heading is None:
+        if not include_unheaded_sections and candidate.find(["h3", "h2"]) is None:
             continue
         parent = candidate.parent
         nested_below_another_stable_id = False
@@ -222,7 +272,12 @@ def _find_main_sections(article: Tag) -> list[Tag]:
     return sections
 
 
-def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[str, Any]:
+def extract_snapshot(
+    source: str,
+    expected_chapters: int | None = None,
+    source_version_fallback: str | None = None,
+    include_unheaded_sections: bool = False,
+) -> dict[str, Any]:
     html, resolved_url = _load_source(source)
     soup = BeautifulSoup(html, "html.parser")
     main = soup.find("main", id="main-content") or soup.find("main")
@@ -236,12 +291,19 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
         )
 
     page_title = normalize_text(soup.title.get_text(" ", strip=True)) if soup.title else ""
-    version_match = re.search(r"(?:Manual\s+|CorOS\s+)(\d+\.\d+\.\d+)", page_title, re.I)
+    version_match = re.search(r"\b(\d+\.\d+\.\d+)\b", page_title)
     if version_match is None:
         manual_heading = main.find("h1")
         heading_text = normalize_text(manual_heading.get_text(" ", strip=True)) if manual_heading else ""
-        version_match = re.search(r"(\d+\.\d+\.\d+)", heading_text)
-    version = version_match.group(1) if version_match else "unknown"
+        version_match = re.search(r"\b(\d+\.\d+\.\d+)\b", heading_text)
+    if version_match:
+        version = version_match.group(1)
+    elif isinstance(source_version_fallback, str) and normalize_text(
+        source_version_fallback
+    ):
+        version = normalize_text(source_version_fallback)
+    else:
+        version = "unknown"
 
     units: list[dict[str, Any]] = []
     chapters: list[dict[str, Any]] = []
@@ -271,12 +333,22 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
         seen_keys.add(chapter_key)
 
         section_keys: list[str] = []
-        for section in _find_main_sections(article):
+        for section in _find_main_sections(article, include_unheaded_sections):
             section_id = str(section.get("id"))
             key = f"section:{section_id}"
             if key in seen_keys:
                 raise SourceFormatError(f"Duplicate stable section identifier: {section_id}")
-            section_heading = section.find(["h3", "h2"])
+            heading_names = (
+                ["h2", "h3", "h4", "h5", "h6"]
+                if include_unheaded_sections
+                else ["h3", "h2"]
+            )
+            section_heading = section.find(heading_names)
+            section_title = (
+                normalize_text(section_heading.get_text(" ", strip=True))
+                if isinstance(section_heading, Tag)
+                else section_id
+            )
             payload = semantic_payload(section, resolved_url)
             source_html = str(section)
             units.append(
@@ -285,7 +357,7 @@ def extract_snapshot(source: str, expected_chapters: int | None = None) -> dict[
                     "kind": "section",
                     "chapter": number,
                     "source_id": section_id,
-                    "title": normalize_text(section_heading.get_text(" ", strip=True)),
+                    "title": section_title,
                     "source_html": source_html,
                     "source_html_sha256": _source_html_sha256(source_html),
                     **payload,

@@ -22,8 +22,14 @@ SCRIPTS = REPOSITORY / ".github" / "scripts"
 FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
 
-from manual_automation.canonical import extract_snapshot  # noqa: E402
-from manual_automation.cli import command_validate  # noqa: E402
+from manual_automation.canonical import (  # noqa: E402
+    extract_snapshot,
+    resolve_plugin_version,
+)
+from manual_automation.cli import (  # noqa: E402
+    _extract_configured_snapshot,
+    command_validate,
+)
 from manual_automation.diffing import classify_change  # noqa: E402
 from manual_automation.pdf import (  # noqa: E402
     PdfValidationError,
@@ -43,7 +49,11 @@ from manual_automation.repository import (  # noqa: E402
     validate_manual_directory,
 )
 from manual_automation.state import StateError, safe_extract  # noqa: E402
-from manual_automation.translate import apply_safe_update  # noqa: E402
+from manual_automation.translate import (  # noqa: E402
+    _localized_unit_element,
+    _refresh_toc_labels,
+    apply_safe_update,
+)
 
 
 TEST_CONFIG = {
@@ -484,6 +494,30 @@ class PrintLayoutGuardTests(unittest.TestCase):
 
 
 class CanonicalizationTests(unittest.TestCase):
+    @staticmethod
+    def _version_source(
+        manual_link: str,
+        version_name: str = "1.1.0 (X)",
+    ) -> str:
+        payload = {
+            "props": {
+                "pageProps": {
+                    "plugins": [
+                        {
+                            "manualLink": manual_link,
+                            "releases": [{"pcVersionName": version_name}],
+                        }
+                    ]
+                }
+            }
+        }
+        return (
+            "<!doctype html><html><body>"
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps(payload)
+            + "</script></body></html>"
+        )
+
     def test_cosmetic_markup_does_not_change_hashes(self) -> None:
         baseline = extract_snapshot(str(FIXTURES / "baseline.html"), 2)
         cosmetic = extract_snapshot(str(FIXTURES / "cosmetic.html"), 2)
@@ -523,8 +557,303 @@ class CanonicalizationTests(unittest.TestCase):
             snapshot["chapters"][0]["section_keys"],
         )
 
+    def test_version_fallback_is_used_only_when_title_and_h1_have_no_version(
+        self,
+    ) -> None:
+        without_version = """<!doctype html><html>
+        <head><title>Example Plugin - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1><article>
+        <div><h2 id="Overview"><span>01</span><br>Overview</h2></div>
+        </article></main></body></html>"""
+        with_version = without_version.replace(
+            "Example Plugin - Neural DSP", "Example Plugin 2.3.4 - Neural DSP"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fallback_source = root / "fallback.html"
+            detected_source = root / "detected.html"
+            fallback_source.write_text(without_version, encoding="utf-8")
+            detected_source.write_text(with_version, encoding="utf-8")
+
+            fallback = extract_snapshot(
+                str(fallback_source),
+                1,
+                source_version_fallback="1.0.0",
+            )
+            detected = extract_snapshot(
+                str(detected_source),
+                1,
+                source_version_fallback="1.0.0",
+            )
+
+        self.assertEqual("1.0.0", fallback["upstream_version"])
+        self.assertEqual("2.3.4", detected["upstream_version"])
+
+    def test_optional_unheaded_sections_support_plugin_manual_structure(
+        self,
+    ) -> None:
+        html = """<!doctype html><html>
+        <head><title>Example Plugin - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1>
+        <article>
+          <div><h2 id="Plugin-Overview"><span>01</span><br>Plugin Overview</h2></div>
+          <div id="Overview"><div><p>Overview without a heading.</p></div></div>
+        </article>
+        <article>
+          <div><h2 id="Acknowledgements"><span>02</span><br>Acknowledgements</h2></div>
+          <div id="Acknowledgements"><div><h4>Special thanks to...</h4>
+          <p>Contributors.</p></div></div>
+        </article>
+        </main></body></html>"""
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "plugin.html"
+            source.write_text(html, encoding="utf-8")
+
+            default_snapshot = extract_snapshot(str(source), 2)
+            plugin_snapshot = extract_snapshot(
+                str(source),
+                2,
+                include_unheaded_sections=True,
+            )
+
+        self.assertEqual(0, default_snapshot["section_count"])
+        self.assertEqual(
+            ["section:Overview"],
+            plugin_snapshot["chapters"][0]["section_keys"],
+        )
+        self.assertEqual(
+            ["section:Acknowledgements"],
+            plugin_snapshot["chapters"][1]["section_keys"],
+        )
+        sections = {
+            unit["key"]: unit
+            for unit in plugin_snapshot["units"]
+            if unit["kind"] == "section"
+        }
+        self.assertEqual("Overview", sections["section:Overview"]["title"])
+        self.assertEqual(
+            "Special thanks to...",
+            sections["section:Acknowledgements"]["title"],
+        )
+
+    def test_explicit_default_section_mode_preserves_existing_snapshot(self) -> None:
+        implicit = extract_snapshot(str(FIXTURES / "baseline.html"), 2)
+        explicit = extract_snapshot(
+            str(FIXTURES / "baseline.html"),
+            2,
+            include_unheaded_sections=False,
+        )
+
+        self.assertEqual(implicit["content_hash"], explicit["content_hash"])
+        self.assertEqual(implicit["chapters"], explicit["chapters"])
+
+    def test_plugin_version_is_resolved_from_matching_manual_link(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "downloads.html"
+            source.write_text(
+                self._version_source(
+                    "https://NEURALDSP.com/manual/example-plugin/?utm_source=test"
+                ),
+                encoding="utf-8",
+            )
+
+            version = resolve_plugin_version(
+                str(source),
+                "https://neuraldsp.com/manual/example-plugin",
+            )
+
+        self.assertEqual("1.1.0", version)
+
+    def test_plugin_version_ignores_a_nonmatching_manual_link(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "downloads.html"
+            source.write_text(
+                self._version_source(
+                    "https://neuraldsp.com/manual/different-plugin"
+                ),
+                encoding="utf-8",
+            )
+
+            version = resolve_plugin_version(
+                str(source),
+                "https://neuraldsp.com/manual/example-plugin",
+            )
+
+        self.assertIsNone(version)
+
+    def test_configured_snapshot_rejects_an_invalid_version_source(
+        self,
+    ) -> None:
+        manual = """<!doctype html><html>
+        <head><title>Example Plugin - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1><article>
+        <div><h2 id="Overview"><span>01</span><br>Overview</h2></div>
+        </article></main></body></html>"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual_source = root / "manual.html"
+            version_source = root / "downloads.html"
+            manual_source.write_text(manual, encoding="utf-8")
+            version_source.write_text("<html>invalid</html>", encoding="utf-8")
+            config = {
+                "source_url": "https://neuraldsp.com/manual/example-plugin",
+                "source_version_fallback": "1.0.0",
+                "version_source_url": str(version_source),
+                "expected_chapter_count": 1,
+            }
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "Refusing to use a stale fallback version",
+            ):
+                _extract_configured_snapshot(str(manual_source), config)
+
+    def test_resolved_plugin_version_has_priority_over_configured_fallback(
+        self,
+    ) -> None:
+        manual = """<!doctype html><html>
+        <head><title>Example Plugin - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1><article>
+        <div><h2 id="Overview"><span>01</span><br>Overview</h2></div>
+        </article></main></body></html>"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual_source = root / "manual.html"
+            version_source = root / "downloads.html"
+            manual_source.write_text(manual, encoding="utf-8")
+            version_source.write_text(
+                self._version_source(
+                    "https://neuraldsp.com/manual/example-plugin"
+                ),
+                encoding="utf-8",
+            )
+            config = {
+                "source_url": "https://neuraldsp.com/manual/example-plugin",
+                "source_version_fallback": "1.0.0",
+                "version_source_url": str(version_source),
+                "expected_chapter_count": 1,
+            }
+
+            snapshot = _extract_configured_snapshot(str(manual_source), config)
+
+        self.assertEqual("1.1.0", snapshot["upstream_version"])
+
+    def test_manual_title_version_has_priority_over_resolved_plugin_version(
+        self,
+    ) -> None:
+        manual = """<!doctype html><html>
+        <head><title>Example Plugin 2.3.4 - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1><article>
+        <div><h2 id="Overview"><span>01</span><br>Overview</h2></div>
+        </article></main></body></html>"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual_source = root / "manual.html"
+            version_source = root / "downloads.html"
+            manual_source.write_text(manual, encoding="utf-8")
+            version_source.write_text(
+                self._version_source(
+                    "https://neuraldsp.com/manual/example-plugin"
+                ),
+                encoding="utf-8",
+            )
+            config = {
+                "source_url": "https://neuraldsp.com/manual/example-plugin",
+                "source_version_fallback": "1.0.0",
+                "version_source_url": str(version_source),
+                "expected_chapter_count": 1,
+            }
+
+            snapshot = _extract_configured_snapshot(str(manual_source), config)
+
+        self.assertEqual("2.3.4", snapshot["upstream_version"])
+
+    def test_resolved_plugin_version_change_is_reported_as_metadata_change(
+        self,
+    ) -> None:
+        manual = """<!doctype html><html>
+        <head><title>Example Plugin - Neural DSP</title></head>
+        <body><main id="main-content"><h1>Example Plugin</h1><article>
+        <div><h2 id="Overview"><span>01</span><br>Overview</h2></div>
+        </article></main></body></html>"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual_source = root / "manual.html"
+            version_source = root / "downloads.html"
+            manual_source.write_text(manual, encoding="utf-8")
+            config = {
+                "source_url": "https://neuraldsp.com/manual/example-plugin",
+                "source_version_fallback": "1.0.0",
+                "version_source_url": str(version_source),
+                "expected_chapter_count": 1,
+                "minimum_section_count": 0,
+                "maximum_changed_unit_count": 1,
+                "maximum_changed_unit_ratio": 1.0,
+            }
+            version_source.write_text(
+                self._version_source(
+                    config["source_url"], version_name="1.1.0 (X)"
+                ),
+                encoding="utf-8",
+            )
+            baseline = _extract_configured_snapshot(str(manual_source), config)
+            version_source.write_text(
+                self._version_source(
+                    config["source_url"], version_name="1.2.0 (X)"
+                ),
+                encoding="utf-8",
+            )
+            candidate = _extract_configured_snapshot(str(manual_source), config)
+            report = classify_change(baseline, candidate, config)
+
+        self.assertEqual("safe_change", report["status"])
+        self.assertEqual([], report["changed_units"])
+        self.assertEqual("1.1.0", report["baseline_version"])
+        self.assertEqual("1.2.0", report["upstream_version"])
+
 
 class TranslationMergeTests(unittest.TestCase):
+    def test_toc_refresh_preserves_manual_label_for_unheaded_section(self) -> None:
+        document = BeautifulSoup(
+            """<!doctype html><html><body>
+            <a class="manual-toc-row manual-toc-row-section" href="#Overview">
+              <span class="manual-toc-label">Обзор</span>
+            </a>
+            <div id="Overview"><p>Полный текст вводного раздела.</p></div>
+            </body></html>""",
+            "html.parser",
+        )
+
+        _refresh_toc_labels(document)
+
+        self.assertEqual(
+            "Обзор",
+            document.select_one(".manual-toc-label").get_text(strip=True),
+        )
+
+    def test_section_locator_prefers_div_when_heading_reuses_the_same_id(
+        self,
+    ) -> None:
+        document = BeautifulSoup(
+            """<!doctype html><html><body>
+            <h2 id="Acknowledgements">02 Благодарности</h2>
+            <div id="Acknowledgements"><h4>Особая благодарность</h4></div>
+            </body></html>""",
+            "html.parser",
+        )
+
+        element = _localized_unit_element(
+            document,
+            {
+                "key": "section:Acknowledgements",
+                "kind": "section",
+                "source_id": "Acknowledgements",
+            },
+        )
+
+        self.assertEqual("div", element.name)
+        self.assertEqual("Особая благодарность", element.get_text(" ", strip=True))
+
     def test_only_changed_text_node_is_replaced(self) -> None:
         baseline = extract_snapshot(str(FIXTURES / "baseline.html"), 2)
         candidate = extract_snapshot(str(FIXTURES / "changed-text.html"), 2)
@@ -749,6 +1078,14 @@ class RepositoryPolicyTests(unittest.TestCase):
             ),
             content,
         )
+        self.assertIn("| Плагин | Archetype: John Mayer X |", content)
+        self.assertIn(
+            (
+                "releases/tag/"
+                "archetype-john-mayer-x-v1.1.0-ru.2026-07-25"
+            ),
+            content,
+        )
         self.assertNotIn("?raw=1", content)
 
     def test_manual_directory_rejects_non_pdf_files(self) -> None:
@@ -953,11 +1290,15 @@ class WorkflowContractTests(unittest.TestCase):
 
         self.assertIn("устройств, плагинов и программ Neural DSP", readme)
         self.assertIn(
-            "Quad Cortex**, **Quad Cortex mini** и **Nano Cortex",
+            (
+                "Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** "
+                "и плагина **Archetype: John Mayer X"
+            ),
             readme,
         )
         self.assertIn("## Руководство Quad Cortex mini", readme)
         self.assertIn("## Руководство Nano Cortex", readme)
+        self.assertIn("## Руководство Archetype: John Mayer X", readme)
         self.assertIn("В каталог попадают только законченные переводы", readme)
         self.assertLess(
             readme.index("| Устройство | Quad Cortex |"),
@@ -966,6 +1307,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(
             readme.index("| Устройство | Quad Cortex mini |"),
             readme.index("| Устройство | Nano Cortex |"),
+        )
+        self.assertLess(
+            readme.index("| Устройство | Nano Cortex |"),
+            readme.index("| Плагин | Archetype: John Mayer X |"),
         )
         self.assertFalse((REPOSITORY / "docs" / "AUTOMATION.md").exists())
 

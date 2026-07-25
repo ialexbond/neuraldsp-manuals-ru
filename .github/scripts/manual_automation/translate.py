@@ -102,7 +102,9 @@ def _validate_translated_items(
 
 def _localized_unit_element(document: BeautifulSoup, unit: dict[str, Any]) -> Tag:
     if unit["kind"] == "section":
-        element = document.find(id=unit["source_id"])
+        element = document.find("div", id=unit["source_id"])
+        if not isinstance(element, Tag):
+            element = document.find(id=unit["source_id"])
     else:
         source_id = f"ch{int(unit['chapter']):02d}-0001"
         heading = document.find(attrs={"data-source-id": source_id})
@@ -239,7 +241,7 @@ def _refresh_cover_metadata(
         cover.string = re.sub(r"\d+\.\d+\.\d+", version, cover.get_text())
     edition = document.select_one(".manual-toc-edition")
     if isinstance(edition, Tag):
-        edition.string = f"Русская редакция — {localized_date}"
+        edition.string = f"Русская редакция - {localized_date}"
     for span in document.select(
         ".manual-toc-continuation-meta span, "
         ".manual-toc-continuation > span:last-child"
@@ -254,6 +256,11 @@ def _refresh_toc_labels(document: BeautifulSoup) -> None:
         target = document.find(id=target_id)
         label = row.select_one(".manual-toc-label")
         if not isinstance(target, Tag) or not isinstance(label, Tag):
+            continue
+        if target.name not in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            # Unheaded stable sections (for example plugin Overview blocks)
+            # use a manually localized TOC label that must not be replaced by
+            # the section's complete body text.
             continue
         title = normalize_text(target.get_text(" ", strip=True))
         if "manual-toc-row-chapter" in row.get("class", []):
