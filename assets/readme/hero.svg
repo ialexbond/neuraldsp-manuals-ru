@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Руководства Neural DSP на русском языке</title>
+  <desc id="desc">Полные русские PDF-руководства с иллюстрациями, кликабельным оглавлением, закладками и поиском по тексту.</desc>
+
+  <rect width="1200" height="400" rx="28" fill="#0D0D12"/>
+  <path d="M56 322H688" stroke="#2E2C36" stroke-width="1"/>
+  <path d="M704 38V362" stroke="#2E2C36" stroke-width="1"/>
+
+  <g id="title-block" transform="translate(58 46)">
+    <rect x="0" y="0" width="12" height="12" rx="3" fill="#6546F2"/>
+    <text x="26" y="12"
+          fill="#AAA6B7" font-size="18" font-weight="600" letter-spacing="1.7"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      НЕОФИЦИАЛЬНАЯ РУССКАЯ ЛОКАЛИЗАЦИЯ
+    </text>
+
+    <text x="0" y="92"
+          fill="#F7F5EF" font-size="54" font-weight="750"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      Руководства Neural DSP
+    </text>
+    <text x="0" y="154"
+          fill="#F7F5EF" font-size="54" font-weight="750"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      на русском языке
+    </text>
+
+    <text x="0" y="205"
+          fill="#C7C4CF" font-size="22" font-weight="400"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      Полные PDF-руководства с сохранёнными иллюстрациями,
+    </text>
+    <text x="0" y="236"
+          fill="#C7C4CF" font-size="22" font-weight="400"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      удобной навигацией и доступным для поиска текстом.
+    </text>
+
+    <g id="scope" transform="translate(0 294)">
+      <rect width="138" height="36" rx="18" fill="#19181F" stroke="#3B3945"/>
+      <text x="69" y="24" text-anchor="middle"
+            fill="#D8D5DF" font-size="16" font-weight="650" letter-spacing="0.8"
+            font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+        УСТРОЙСТВА
+      </text>
+
+      <rect x="150" width="118" height="36" rx="18" fill="#19181F" stroke="#3B3945"/>
+      <text x="209" y="24" text-anchor="middle"
+            fill="#D8D5DF" font-size="16" font-weight="650" letter-spacing="0.8"
+            font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+        ПЛАГИНЫ
+      </text>
+
+      <rect x="280" width="142" height="36" rx="18" fill="#19181F" stroke="#3B3945"/>
+      <text x="351" y="24" text-anchor="middle"
+            fill="#D8D5DF" font-size="16" font-weight="650" letter-spacing="0.8"
+            font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+        ПРОГРАММЫ
+      </text>
+    </g>
+  </g>
+
+  <g id="manual-proof">
+    <rect x="806" y="64" width="302" height="292" rx="20"
+          fill="#211F28" stroke="#373440" stroke-width="2"
+          transform="rotate(4 957 210)"/>
+    <rect x="770" y="50" width="302" height="292" rx="20"
+          fill="#2B2834" stroke="#454150" stroke-width="2"
+          transform="rotate(-2 921 196)"/>
+
+    <rect x="742" y="40" width="310" height="302" rx="20"
+          fill="#F5F2EA"/>
+    <rect x="1012" y="40" width="40" height="72" fill="#6546F2"/>
+    <text x="1032" y="76" text-anchor="middle"
+          fill="#FFFFFF" font-size="17" font-weight="750"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          transform="rotate(90 1032 76)">
+      PDF
+    </text>
+
+    <text x="778" y="83"
+          fill="#77717F" font-size="17" font-weight="700" letter-spacing="1.4"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      РУССКАЯ РЕДАКЦИЯ
+    </text>
+    <text x="778" y="119"
+          fill="#16151A" font-size="29" font-weight="760"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      Содержание
+    </text>
+    <path d="M778 136H1016" stroke="#CBC6D0" stroke-width="1.5"/>
+
+    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <text x="778" y="174" fill="#6546F2" font-size="22" font-weight="760">01</text>
+      <text x="824" y="174" fill="#242228" font-size="20" font-weight="650">Иллюстрации</text>
+      <path d="M945 168H1016" stroke="#A8A2AE" stroke-width="2" stroke-dasharray="2 7"/>
+
+      <text x="778" y="217" fill="#6546F2" font-size="22" font-weight="760">02</text>
+      <text x="824" y="217" fill="#242228" font-size="20" font-weight="650">Оглавление</text>
+      <path d="M952 211H1016" stroke="#A8A2AE" stroke-width="2" stroke-dasharray="2 7"/>
+
+      <text x="778" y="260" fill="#6546F2" font-size="22" font-weight="760">03</text>
+      <text x="824" y="260" fill="#242228" font-size="20" font-weight="650">Закладки</text>
+      <path d="M928 254H1016" stroke="#A8A2AE" stroke-width="2" stroke-dasharray="2 7"/>
+
+      <text x="778" y="303" fill="#6546F2" font-size="22" font-weight="760">04</text>
+      <text x="824" y="303" fill="#242228" font-size="20" font-weight="650">Поиск по тексту</text>
+    </g>
+
+    <circle cx="1077" cy="305" r="35" fill="#6546F2"/>
+    <path d="M1063 305L1074 316L1093 293"
+          fill="none" stroke="#FFFFFF" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

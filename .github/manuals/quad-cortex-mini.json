@@ -3,6 +3,7 @@
   "slug": "quad-cortex-mini",
   "display_name": "Quad Cortex mini",
   "category": "Устройство",
+  "catalog_order": 20,
   "source_url": "https://neuraldsp.com/manual/quad-cortex-mini",
   "expected_chapter_count": 12,
   "minimum_section_count": 67,

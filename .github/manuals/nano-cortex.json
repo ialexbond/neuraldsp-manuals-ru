@@ -3,6 +3,7 @@
   "slug": "nano-cortex",
   "display_name": "Nano Cortex",
   "category": "Устройство",
+  "catalog_order": 30,
   "source_url": "https://neuraldsp.com/manual/nano-cortex",
   "expected_chapter_count": 8,
   "minimum_section_count": 54,
