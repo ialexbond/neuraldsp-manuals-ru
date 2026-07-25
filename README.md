@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X** и **Darkglass Ultimate**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate** и **Mantra**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -25,6 +25,7 @@
 | Устройство | Nano Cortex | [2.2.0](https://neuraldsp.com/manual/nano-cortex) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/nano-cortex-v2.2.0-ru.2026-07-25) |
 | Плагин | Archetype: John Mayer X | [1.1.0](https://neuraldsp.com/manual/archetype-john-mayer-x) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-john-mayer-x-v1.1.0-ru.2026-07-25) |
 | Плагин | Darkglass Ultimate | [1.0.1](https://neuraldsp.com/manual/darkglass-ultimate) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/darkglass-ultimate-v1.0.1-ru.2026-07-25) |
+| Плагин | Mantra | [1.1.1](https://neuraldsp.com/manual/mantra) | 25.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/mantra-v1.1.1-ru.2026-07-25) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -77,6 +78,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Darkglass Ultimate на русском языке:
 
 **[Открыть актуальный релиз Darkglass Ultimate →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/darkglass-ultimate-v1.0.1-ru.2026-07-25)**
+
+## Руководство Mantra
+
+Русская инструкция к плагину Neural DSP Mantra 1.1.1 охватывает модули Tune, Gate, Sculpt, De-Esser, EQ, Compressor, Saturation, Harmonies, Delay, Reverb, Modulation и Doubler, а также пресеты, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Mantra на русском языке:
+
+**[Открыть актуальный релиз Mantra →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/mantra-v1.1.1-ru.2026-07-25)**
 
 ## Что публикуется в репозитории
 
