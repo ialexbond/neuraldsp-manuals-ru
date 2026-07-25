@@ -1290,10 +1290,7 @@ class WorkflowContractTests(unittest.TestCase):
 
         self.assertIn("устройств, плагинов и программ Neural DSP", readme)
         self.assertIn(
-            (
-                "Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** "
-                "и плагина **Archetype: John Mayer X"
-            ),
+            "Сейчас опубликованы полные русские версии руководств пользователя",
             readme,
         )
         self.assertIn("## Руководство Quad Cortex mini", readme)
