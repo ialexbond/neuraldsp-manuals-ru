@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from .alignment import align_snapshot
-from .canonical import extract_snapshot, validate_snapshot_integrity
+from .canonical import (
+    extract_snapshot,
+    resolve_plugin_version,
+    validate_snapshot_integrity,
+)
 from .diffing import classify_change
 from .pdf import build_pdf, pdf_metrics, validate_pdf
 from .repository import (
@@ -35,6 +39,32 @@ from .translate import apply_safe_update
 
 def _config(path: str) -> dict[str, Any]:
     return read_json(Path(path))
+
+
+def _extract_configured_snapshot(
+    source: str, config: dict[str, Any]
+) -> dict[str, Any]:
+    resolved_version = None
+    version_source_url = config.get("version_source_url")
+    if isinstance(version_source_url, str) and version_source_url.strip():
+        resolved_version = resolve_plugin_version(
+            version_source_url, str(config["source_url"])
+        )
+        if resolved_version is None:
+            raise RuntimeError(
+                "Unable to resolve the upstream plugin version from "
+                f"{version_source_url}. Refusing to use a stale fallback version."
+            )
+    return extract_snapshot(
+        source,
+        config["expected_chapter_count"],
+        source_version_fallback=(
+            resolved_version or config.get("source_version_fallback")
+        ),
+        include_unheaded_sections=bool(
+            config.get("include_unheaded_sections", False)
+        ),
+    )
 
 
 def _write_result(value: dict[str, Any], path: str | None) -> None:
@@ -178,8 +208,8 @@ def _clean_work_directory(
 
 def command_snapshot(args: argparse.Namespace) -> int:
     config = _config(args.config)
-    snapshot = extract_snapshot(
-        args.source or config["source_url"], config["expected_chapter_count"]
+    snapshot = _extract_configured_snapshot(
+        args.source or config["source_url"], config
     )
     _write_result(snapshot, args.output)
     return 0
@@ -188,7 +218,7 @@ def command_snapshot(args: argparse.Namespace) -> int:
 def command_bootstrap(args: argparse.Namespace) -> int:
     config = _config(args.config)
     source = args.source or config["source_url"]
-    snapshot = extract_snapshot(source, config["expected_chapter_count"])
+    snapshot = _extract_configured_snapshot(source, config)
     if snapshot["section_count"] < config["minimum_section_count"]:
         raise RuntimeError(
             f"Only {snapshot['section_count']} stable sections were found during bootstrap."
@@ -261,8 +291,8 @@ def _check_manual(
     state_directory = work_directory / "state"
     state = unpack_state(state_archive, state_directory)
     _validate_state_manual(state, config)
-    candidate = extract_snapshot(
-        source or config["source_url"], config["expected_chapter_count"]
+    candidate = _extract_configured_snapshot(
+        source or config["source_url"], config
     )
     report = classify_change(state["snapshot"], candidate, config)
     write_json(snapshot_output, candidate)

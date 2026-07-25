@@ -76,22 +76,57 @@ async function main() {
     await page.goto(url, { waitUntil: "load", timeout: 120000 });
     await page.emulateMedia({ media: "print" });
     const resources = await page.evaluate(async () => {
+      const waitAtMost = async (promise, milliseconds) => {
+        let timer;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise((resolve) => {
+              timer = setTimeout(resolve, milliseconds);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
       const requiredFonts = [
         '400 16px "IBM Plex Sans"',
         '700 16px "IBM Plex Sans"',
         'italic 400 16px "IBM Plex Sans"',
         'italic 700 16px "IBM Plex Sans"',
       ];
-      await Promise.all(requiredFonts.map((font) => document.fonts.load(font, "Русский текст")));
-      await document.fonts.ready;
       const images = [...document.images];
-      await Promise.all(images.map(async (image) => {
+      for (const image of images) {
+        image.loading = "eager";
+        image.removeAttribute("loading");
+      }
+      const imagePromises = images.map(async (image) => {
         if (image.complete) return;
         await new Promise((resolve) => {
-          image.addEventListener("load", resolve, { once: true });
-          image.addEventListener("error", resolve, { once: true });
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+          image.addEventListener("load", finish, { once: true });
+          image.addEventListener("error", finish, { once: true });
+          // A local image can finish between the first `complete` check and
+          // listener registration. Re-check after installing the listeners so
+          // that fast cache hits cannot leave PDF rendering waiting forever.
+          if (image.complete) finish();
         });
-      }));
+      });
+      await waitAtMost(
+        Promise.all([
+          Promise.all(
+            requiredFonts.map((font) => document.fonts.load(font, "Русский текст")),
+          ),
+          document.fonts.ready,
+          Promise.all(imagePromises),
+        ]),
+        30000,
+      );
       return {
         imageCount: images.length,
         brokenImages: images
