@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "slug": "mantra",
+  "display_name": "Mantra",
+  "category": "Плагин",
+  "catalog_order": 60,
+  "source_url": "https://neuraldsp.com/manual/mantra",
+  "version_source_url": "https://neuraldsp.com/downloads",
+  "source_version_fallback": "1.1.1",
+  "include_unheaded_sections": true,
+  "expected_chapter_count": 5,
+  "minimum_section_count": 17,
+  "pdf_directory": "manuals/mantra",
+  "pdf_name_template": "Mantra_User_Manual_RU_v{version}_rev{date}.pdf",
+  "release_tag_template": "mantra-v{version}-ru.{date}",
+  "maximum_changed_unit_ratio": 0.2,
+  "maximum_changed_unit_count": 8,
+  "minimum_pdf_pages": 40,
+  "maximum_pdf_page_delta_ratio": 0.2,
+  "minimum_internal_link_count": 22,
+  "playwright_version": "1.61.1"
+}
