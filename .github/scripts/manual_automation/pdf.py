@@ -441,17 +441,28 @@ def _normalize_font_name(name: str) -> str:
 
 
 def _chapter_opener_audit(
-    document: fitz.Document, expected_chapter_count: int = 12
+    document: fitz.Document,
+    expected_chapter_count: int = 12,
+    chapter_mode: str = "numbered_level_two",
 ) -> dict[str, Any]:
     chapters: list[dict[str, Any]] = []
     title_only_pages: list[int] = []
     for item in document.get_toc(simple=True):
-        if len(item) < 3 or int(item[0]) != 2:
+        if len(item) < 3:
             continue
+        level = int(item[0])
         normalized_title = re.sub(
             r"[^\w]+", "", str(item[1]).casefold(), flags=re.UNICODE
         )
-        if not re.match(r"^\d{2}", normalized_title):
+        if chapter_mode == "top_level_bookmarks":
+            if level != 1 or not normalized_title:
+                continue
+        elif chapter_mode == "numbered_level_two":
+            if level != 2 or not re.match(r"^\d{2}", normalized_title):
+                continue
+        else:
+            raise PdfValidationError(f"Unknown PDF chapter mode: {chapter_mode}")
+        if not 1 <= int(item[2]) <= document.page_count:
             continue
         page_number = int(item[2])
         page_text = re.sub(
@@ -590,6 +601,8 @@ def pdf_metrics(
     pdf_path: Path,
     font_directory: Path | None = None,
     expected_chapter_count: int = 12,
+    *,
+    chapter_mode: str = "numbered_level_two",
 ) -> dict[str, Any]:
     with fitz.open(pdf_path) as document:
         sizes = sorted(
@@ -670,7 +683,11 @@ def pdf_metrics(
             page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5), alpha=False)
             rendered_pages += 1
         outline = document.get_toc(simple=False)
-        chapter_openers = _chapter_opener_audit(document, expected_chapter_count)
+        chapter_openers = _chapter_opener_audit(
+            document,
+            expected_chapter_count,
+            chapter_mode,
+        )
         invalid_bookmarks = sum(
             len(item) < 3 or not 1 <= int(item[2]) <= document.page_count
             for item in outline
@@ -717,10 +734,19 @@ def validate_pdf(
                 "A reference font directory is required for PDF validation."
             )
         font_directory = document_path.parents[1] / "assets" / "fonts"
+    metrics_kwargs: dict[str, Any] = {}
+    if "pdf_chapter_mode" in config:
+        metrics_kwargs["chapter_mode"] = str(config["pdf_chapter_mode"])
     metrics = pdf_metrics(
         pdf_path,
         font_directory,
-        int(config["expected_chapter_count"]),
+        int(
+            config.get(
+                "expected_pdf_chapter_count",
+                config["expected_chapter_count"],
+            )
+        ),
+        **metrics_kwargs,
     )
     errors: list[str] = []
     if metrics["page_count"] < config["minimum_pdf_pages"]:
@@ -764,7 +790,10 @@ def validate_pdf(
         errors.append(
             f"{len(metrics['out_of_bounds_text_blocks'])} text blocks extend outside page bounds"
         )
-    if metrics["text_block_overlaps"]:
+    preserved_source_layout = (
+        config.get("pdf_validation_profile") == "preserved_source_layout"
+    )
+    if metrics["text_block_overlaps"] and not preserved_source_layout:
         errors.append(
             f"{len(metrics['text_block_overlaps'])} material text-block overlaps were found"
         )
@@ -788,7 +817,7 @@ def validate_pdf(
             "standalone headings must remain with substantive following content "
             f"({locations})"
         )
-    if not metrics["fonts"]["valid"]:
+    if not metrics["fonts"]["valid"] and not preserved_source_layout:
         errors.append(
             "embedded IBM Plex Sans faces or metrics do not match the accepted fonts"
         )

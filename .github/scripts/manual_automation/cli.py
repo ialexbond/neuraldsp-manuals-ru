@@ -11,7 +11,9 @@ from typing import Any
 
 from .alignment import align_snapshot
 from .canonical import (
+    extract_pdf_snapshot,
     extract_snapshot,
+    resolve_manual_source,
     resolve_plugin_version,
     validate_snapshot_integrity,
 )
@@ -44,6 +46,33 @@ def _config(path: str) -> dict[str, Any]:
 def _extract_configured_snapshot(
     source: str, config: dict[str, Any]
 ) -> dict[str, Any]:
+    if config.get("source_kind", "html") == "pdf":
+        resolved_source = source
+        catalog_url = config.get("version_source_url")
+        catalog_title = config.get("source_catalog_name", config.get("display_name"))
+        if (
+            source == config.get("source_url")
+            and isinstance(catalog_url, str)
+            and catalog_url.strip()
+            and isinstance(catalog_title, str)
+            and catalog_title.strip()
+        ):
+            locator_slug = config.get("source_locator_slug")
+            resolved_source = resolve_manual_source(
+                catalog_url,
+                catalog_title,
+                locator_slug if isinstance(locator_slug, str) else None,
+            )
+            if resolved_source is None:
+                raise RuntimeError(
+                    "Unable to resolve the current upstream PDF manual from "
+                    f"{catalog_url}."
+                )
+        return extract_pdf_snapshot(
+            resolved_source,
+            config["expected_chapter_count"],
+            source_version_fallback=config.get("source_version_fallback"),
+        )
     resolved_version = None
     version_source_url = config.get("version_source_url")
     if isinstance(version_source_url, str) and version_source_url.strip():
@@ -234,10 +263,19 @@ def command_bootstrap(args: argparse.Namespace) -> int:
             f"Localized HTML cannot be safely aligned with the source: {preview}"
         )
 
+    metrics_kwargs: dict[str, Any] = {}
+    if "pdf_chapter_mode" in config:
+        metrics_kwargs["chapter_mode"] = str(config["pdf_chapter_mode"])
     metrics = pdf_metrics(
         baseline_pdf,
         asset_directory / "fonts",
-        int(config["expected_chapter_count"]),
+        int(
+            config.get(
+                "expected_pdf_chapter_count",
+                config["expected_chapter_count"],
+            )
+        ),
+        **metrics_kwargs,
     )
     with tempfile.TemporaryDirectory(prefix="manual-state-bootstrap-") as temporary:
         state_directory = Path(temporary) / "state"
@@ -258,6 +296,67 @@ def command_bootstrap(args: argparse.Namespace) -> int:
         "chapter_count": snapshot["chapter_count"],
         "section_count": snapshot["section_count"],
         "alignment": alignment,
+        "baseline_pdf": metrics,
+    }
+    _write_result(result, args.result)
+    return 0
+
+
+def command_bootstrap_monitor(args: argparse.Namespace) -> int:
+    config = _config(args.config)
+    if config.get("source_kind") != "pdf" or not config.get("monitor_only"):
+        raise RuntimeError(
+            "Monitor bootstrap requires source_kind=pdf and monitor_only=true."
+        )
+    snapshot = _extract_configured_snapshot(
+        args.source or config["source_url"], config
+    )
+    if snapshot["section_count"] < config["minimum_section_count"]:
+        raise RuntimeError(
+            f"Only {snapshot['section_count']} stable sections were found during bootstrap."
+        )
+    baseline_pdf = Path(args.baseline_pdf).resolve()
+    metrics_kwargs: dict[str, Any] = {}
+    if "pdf_chapter_mode" in config:
+        metrics_kwargs["chapter_mode"] = str(config["pdf_chapter_mode"])
+    metrics = pdf_metrics(
+        baseline_pdf,
+        Path(args.font_directory).resolve(),
+        int(
+            config.get(
+                "expected_pdf_chapter_count",
+                config["expected_chapter_count"],
+            )
+        ),
+        **metrics_kwargs,
+    )
+    with tempfile.TemporaryDirectory(prefix="manual-monitor-bootstrap-") as temporary:
+        temporary_directory = Path(temporary)
+        localized_html = temporary_directory / "document.html"
+        localized_html.write_text(
+            "<!doctype html><html lang=\"ru\"><body></body></html>\n",
+            encoding="utf-8",
+        )
+        assets = temporary_directory / "assets"
+        assets.mkdir()
+        (assets / ".keep").write_bytes(b"")
+        state_directory = temporary_directory / "state"
+        initialize_state_directory(
+            state_directory,
+            str(config["slug"]),
+            snapshot,
+            localized_html,
+            assets,
+            baseline_pdf,
+            metrics,
+        )
+        create_archive(state_directory, Path(args.output).resolve())
+    result = {
+        "status": "monitor_bootstrapped",
+        "archive": str(Path(args.output).resolve()),
+        "upstream_version": snapshot["upstream_version"],
+        "chapter_count": snapshot["chapter_count"],
+        "section_count": snapshot["section_count"],
         "baseline_pdf": metrics,
     }
     _write_result(result, args.result)
@@ -547,6 +646,10 @@ def command_check_all(args: argparse.Namespace) -> int:
 
 def command_update(args: argparse.Namespace) -> int:
     config = _config(args.config)
+    if config.get("source_kind") == "pdf" or config.get("monitor_only"):
+        raise RuntimeError(
+            "This manual is monitor-only and requires a manually reviewed translation."
+        )
     report = read_json(Path(args.report).resolve())
     if report.get("status") != "safe_change":
         raise RuntimeError(
@@ -675,9 +778,18 @@ def _validate_state_pdf_archive(
     version = state["snapshot"]["upstream_version"]
     expected_name = expected_pdf_name(config, version, edition_date)
     baseline = state.get("baseline_pdf", {})
+    metrics_kwargs: dict[str, Any] = {}
+    if "pdf_chapter_mode" in config:
+        metrics_kwargs["chapter_mode"] = str(config["pdf_chapter_mode"])
     actual = pdf_metrics(
         pdf_path,
-        expected_chapter_count=int(config["expected_chapter_count"]),
+        expected_chapter_count=int(
+            config.get(
+                "expected_pdf_chapter_count",
+                config["expected_chapter_count"],
+            )
+        ),
+        **metrics_kwargs,
     )
     comparisons = {
         "filename": (pdf_path.name, expected_name),
@@ -757,6 +869,17 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--output", required=True)
     bootstrap.add_argument("--result")
     bootstrap.set_defaults(handler=command_bootstrap)
+
+    bootstrap_monitor = subparsers.add_parser(
+        "bootstrap-monitor", help="Create a read-only monitor state archive"
+    )
+    bootstrap_monitor.add_argument("--config", required=True)
+    bootstrap_monitor.add_argument("--source")
+    bootstrap_monitor.add_argument("--baseline-pdf", required=True)
+    bootstrap_monitor.add_argument("--font-directory", required=True)
+    bootstrap_monitor.add_argument("--output", required=True)
+    bootstrap_monitor.add_argument("--result")
+    bootstrap_monitor.set_defaults(handler=command_bootstrap_monitor)
 
     check = subparsers.add_parser(
         "check", help="Compare upstream content with saved state"
