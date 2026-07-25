@@ -3,6 +3,7 @@
   "slug": "quad-cortex",
   "display_name": "Quad Cortex",
   "category": "Устройство",
+  "catalog_order": 10,
   "source_url": "https://neuraldsp.com/manual/quad-cortex",
   "expected_chapter_count": 12,
   "minimum_section_count": 60,

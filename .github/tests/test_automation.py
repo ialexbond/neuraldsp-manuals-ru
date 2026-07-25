@@ -622,7 +622,7 @@ class RepositoryPolicyTests(unittest.TestCase):
             self.assertIn("Опубликовано", content)
             self.assertIn("| Устройство | Quad Cortex |", content)
             self.assertIn("| Плагин | Example Plugin |", content)
-            self.assertIn("[Открыть релиз]", content)
+            self.assertIn("[Открыть]", content)
             self.assertIn(
                 "releases/tag/quad-cortex-v4.1.0-ru.2026-08-23",
                 content,
@@ -670,6 +670,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                     "slug": "quad-cortex",
                     "display_name": "Quad Cortex",
                     "category": "Устройство",
+                    "catalog_order": 10,
                     "source_url": "https://example.test/quad-cortex",
                     "pdf_directory": "manuals/quad-cortex",
                     "pdf_name_template": "Quad_Cortex_RU_v{version}_rev{date}.pdf",
@@ -680,6 +681,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                     "slug": "example-plugin",
                     "display_name": "Example Plugin",
                     "category": "Плагин",
+                    "catalog_order": 20,
                     "source_url": "https://example.test/plugin",
                     "pdf_directory": "manuals/example-plugin",
                     "pdf_name_template": "Example_Plugin_RU_v{version}_rev{date}.pdf",
@@ -701,22 +703,22 @@ class RepositoryPolicyTests(unittest.TestCase):
             rows = manual_catalog(repository)
 
             self.assertEqual(
-                ["Example Plugin", "Quad Cortex"],
+                ["Quad Cortex", "Example Plugin"],
                 [row["display_name"] for row in rows],
             )
-            self.assertEqual("24.08.2026", rows[0]["edition_date"])
-            self.assertEqual("23.07.2026", rows[1]["edition_date"])
+            self.assertEqual("23.07.2026", rows[0]["edition_date"])
+            self.assertEqual("24.08.2026", rows[1]["edition_date"])
             self.assertEqual(
                 (
                     "https://github.com/ialexbond/neuraldsp-manuals-ru/"
-                    "releases/tag/example-plugin-v1.2.0-ru.2026-08-24"
+                    "releases/tag/quad-cortex-v4.0.0-ru.2026-07-23"
                 ),
                 rows[0]["release_url"],
             )
             self.assertEqual(
                 (
                     "https://github.com/ialexbond/neuraldsp-manuals-ru/"
-                    "releases/tag/quad-cortex-v4.0.0-ru.2026-07-23"
+                    "releases/tag/example-plugin-v1.2.0-ru.2026-08-24"
                 ),
                 rows[1]["release_url"],
             )
@@ -957,6 +959,14 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("## Руководство Quad Cortex mini", readme)
         self.assertIn("## Руководство Nano Cortex", readme)
         self.assertIn("В каталог попадают только законченные переводы", readme)
+        self.assertLess(
+            readme.index("| Устройство | Quad Cortex |"),
+            readme.index("| Устройство | Quad Cortex mini |"),
+        )
+        self.assertLess(
+            readme.index("| Устройство | Quad Cortex mini |"),
+            readme.index("| Устройство | Nano Cortex |"),
+        )
         self.assertFalse((REPOSITORY / "docs" / "AUTOMATION.md").exists())
 
 

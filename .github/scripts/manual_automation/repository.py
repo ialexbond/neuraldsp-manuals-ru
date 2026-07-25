@@ -92,8 +92,15 @@ def validate_manual_directory(
     }
 
 
-def manual_catalog(repository: Path) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
+def _catalog_sort_key(item: dict[str, str | int]) -> tuple[int, str]:
+    return (
+        int(item.get("catalog_order", 1_000_000)),
+        str(item["display_name"]).casefold(),
+    )
+
+
+def manual_catalog(repository: Path) -> list[dict[str, str | int]]:
+    rows: list[dict[str, str | int]] = []
     config_directory = repository / ".github" / "manuals"
     for config_path in sorted(config_directory.glob("*.json")):
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -115,6 +122,7 @@ def manual_catalog(repository: Path) -> list[dict[str, str]]:
         rows.append(
             {
                 "category": config["category"],
+                "catalog_order": int(config.get("catalog_order", 1_000_000)),
                 "display_name": config["display_name"],
                 "version": version,
                 "edition_date": f"{day}.{month}.{year}",
@@ -123,13 +131,13 @@ def manual_catalog(repository: Path) -> list[dict[str, str]]:
                 "release_url": f"{PUBLIC_RELEASES_URL}/tag/{release_tag}",
             }
         )
-    return sorted(rows, key=lambda item: item["display_name"].casefold())
+    return sorted(rows, key=_catalog_sort_key)
 
 
 def update_readme(
     readme_path: Path,
     *,
-    rows: list[dict[str, str]],
+    rows: list[dict[str, str | int]],
 ) -> None:
     content = readme_path.read_text(encoding="utf-8")
     if content.count(STATUS_START) != 1 or content.count(STATUS_END) != 1:
@@ -147,11 +155,11 @@ def update_readme(
         "| Категория | Продукт | Версия оригинала | Русская редакция | Статус | Релиз |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
-    for row in sorted(rows, key=lambda item: item["display_name"].casefold()):
+    for row in sorted(rows, key=_catalog_sort_key):
         lines.append(
             f"| {row['category']} | {row['display_name']} | "
             f"[{row['version']}]({row['source_url']}) | {row['edition_date']} | "
-            f"Опубликовано | [Открыть релиз]({row['release_url']}) |"
+            f"Опубликовано | [Открыть]({row['release_url']}) |"
         )
     lines.append(STATUS_END)
     block = "\n".join(lines)
