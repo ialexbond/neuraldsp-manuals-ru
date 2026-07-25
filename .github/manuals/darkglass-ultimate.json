@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "slug": "darkglass-ultimate",
+  "display_name": "Darkglass Ultimate",
+  "category": "Плагин",
+  "catalog_order": 50,
+  "source_url": "https://neuraldsp.com/manual/darkglass-ultimate",
+  "source_version_fallback": "1.0.1",
+  "include_unheaded_sections": true,
+  "expected_chapter_count": 5,
+  "minimum_section_count": 22,
+  "pdf_directory": "manuals/darkglass-ultimate",
+  "pdf_name_template": "Darkglass_Ultimate_User_Manual_RU_v{version}_rev{date}.pdf",
+  "release_tag_template": "darkglass-ultimate-v{version}-ru.{date}",
+  "maximum_changed_unit_ratio": 0.2,
+  "maximum_changed_unit_count": 8,
+  "minimum_pdf_pages": 40,
+  "maximum_pdf_page_delta_ratio": 0.15,
+  "minimum_internal_link_count": 25,
+  "playwright_version": "1.61.1"
+}
