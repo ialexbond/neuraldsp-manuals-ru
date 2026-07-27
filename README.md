@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X** и **Archetype: Tim Henson X**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X** и **Archetype: Rabea X**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -30,6 +30,7 @@
 | Плагин | Morgan Amps Suite | [1.1.0](https://downloads.neuraldsp.com/file/morgan-amps-suite-installers/v_1.1.0/Morgan%20Amps%20Suite%20v1.1.0.pdf) | 26.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/morgan-amps-suite-v1.1.0-ru.2026-07-26) |
 | Плагин | Archetype: Cory Wong X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-cory-wong-x/Archetype%20Cory%20Wong%20X%20v1.0.0.pdf) | 26.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-cory-wong-x-v1.0.0-ru.2026-07-26) |
 | Плагин | Archetype: Tim Henson X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-tim-henson-x/Archetype%20Tim%20Henson%20X%20v1.0.0.pdf) | 26.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-tim-henson-x-v1.0.0-ru.2026-07-26) |
+| Плагин | Archetype: Rabea X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-rabea-x-installers/v_1.0.0/Archetype%20Rabea%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-rabea-x-v1.0.0-ru.2026-07-27) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -122,6 +123,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Tim Henson X на русском языке:
 
 **[Открыть актуальный релиз Archetype: Tim Henson X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-tim-henson-x-v1.0.0-ru.2026-07-26)**
+
+## Руководство Archetype: Rabea X
+
+Русская инструкция к плагину Neural DSP Archetype: Rabea X 1.0.0 охватывает Synth, Pre Effects, усилители, Cab, EQ и Post Effects, а также пресеты, тюнер, метроном, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Rabea X на русском языке:
+
+**[Открыть актуальный релиз Archetype: Rabea X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-rabea-x-v1.0.0-ru.2026-07-27)**
 
 ## Что публикуется в репозитории
 
