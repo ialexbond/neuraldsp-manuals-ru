@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X**, **Fortin Nameless Suite X**, **Archetype: Nolly X** и **Archetype: Mateus Asato**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X**, **Fortin Nameless Suite X**, **Archetype: Nolly X**, **Archetype: Mateus Asato** и **Parallax X**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -37,6 +37,7 @@
 | Плагин | Fortin Nameless Suite X | [1.0.0](https://downloads.neuraldsp.com/file/fortin-nameless-x/Fortin%20Nameless%20Suite%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/fortin-nameless-suite-x-v1.0.0-ru.2026-07-27) |
 | Плагин | Archetype: Nolly X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-nolly-x-installers/Archetype%20Nolly%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-nolly-x-v1.0.0-ru.2026-07-27) |
 | Плагин | Archetype: Mateus Asato | [1.1.0](https://downloads.neuraldsp.com/file/archetype-mateus-asato/Archetype%20Mateus%20Asato%20v1.1.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-mateus-asato-v1.1.0-ru.2026-07-27) |
+| Плагин | Parallax X | [1.0.0](https://downloads.neuraldsp.com/file/parallax-x-installers/Parallax%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/parallax-x-v1.0.0-ru.2026-07-27) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -185,6 +186,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Mateus Asato на русском языке:
 
 **[Открыть актуальный релиз Archetype: Mateus Asato →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-mateus-asato-v1.1.0-ru.2026-07-27)**
+
+## Руководство Parallax X
+
+Русская инструкция к плагину Neural DSP Parallax X 1.0.0 охватывает многополосную обработку баса, секции Low, Mid и High Distortion, Cab и Equalizer, а также пресеты, тюнер, метроном, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Parallax X на русском языке:
+
+**[Открыть актуальный релиз Parallax X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/parallax-x-v1.0.0-ru.2026-07-27)**
 
 ## Что публикуется в репозитории
 
