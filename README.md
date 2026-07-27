@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X** и **Fortin Nameless Suite X**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X**, **Fortin Nameless Suite X** и **Archetype: Nolly X**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -35,6 +35,7 @@
 | Плагин | Archetype: Plini X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-plini-x-installers/v_1.0.0/Archetype-Plini-X-v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-plini-x-v1.0.0-ru.2026-07-27) |
 | Плагин | Archetype: Petrucci X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-petrucci-x/Archetype+Petrucci%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-petrucci-x-v1.0.0-ru.2026-07-27) |
 | Плагин | Fortin Nameless Suite X | [1.0.0](https://downloads.neuraldsp.com/file/fortin-nameless-x/Fortin%20Nameless%20Suite%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/fortin-nameless-suite-x-v1.0.0-ru.2026-07-27) |
+| Плагин | Archetype: Nolly X | [1.0.0](https://downloads.neuraldsp.com/file/archetype-nolly-x-installers/Archetype%20Nolly%20X%20v1.0.0.pdf) | 27.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-nolly-x-v1.0.0-ru.2026-07-27) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -167,6 +168,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Fortin Nameless Suite X на русском языке:
 
 **[Открыть актуальный релиз Fortin Nameless Suite X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/fortin-nameless-suite-x-v1.0.0-ru.2026-07-27)**
+
+## Руководство Archetype: Nolly X
+
+Русская инструкция к плагину Neural DSP Archetype: Nolly X 1.0.0 охватывает Compressor, Overdrive, Delay и Reverb, четыре усилителя, Cab и EQ, а также пресеты, тюнер, метроном, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Nolly X на русском языке:
+
+**[Открыть актуальный релиз Archetype: Nolly X →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-nolly-x-v1.0.0-ru.2026-07-27)**
 
 ## Что публикуется в репозитории
 
