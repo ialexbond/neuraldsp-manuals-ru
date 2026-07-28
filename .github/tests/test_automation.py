@@ -23,6 +23,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
 
 from manual_automation.canonical import (  # noqa: E402
+    SourceFormatError,
     extract_pdf_snapshot,
     extract_snapshot,
     resolve_manual_source,
@@ -240,6 +241,36 @@ class PdfValidationTests(unittest.TestCase):
         config = {
             **self.CONFIG,
             "pdf_validation_profile": "preserved_source_layout",
+        }
+        with patch("manual_automation.pdf.pdf_metrics", return_value=metrics):
+            result = validate_pdf(
+                Path("manual.pdf"),
+                None,
+                config,
+                font_directory=Path("reference-fonts"),
+            )
+
+        self.assertTrue(result["valid"])
+
+    def test_landscape_a4_is_accepted(self) -> None:
+        metrics = copy.deepcopy(self.VALID_METRICS)
+        metrics["page_sizes"] = [[842.0, 595.0]]
+        with patch("manual_automation.pdf.pdf_metrics", return_value=metrics):
+            result = validate_pdf(
+                Path("manual.pdf"),
+                None,
+                self.CONFIG,
+                font_directory=Path("reference-fonts"),
+            )
+
+        self.assertTrue(result["valid"])
+
+    def test_untagged_pdf_requires_an_explicit_manual_exception(self) -> None:
+        metrics = copy.deepcopy(self.VALID_METRICS)
+        metrics["tagged"] = False
+        config = {
+            **self.CONFIG,
+            "require_tagged_pdf": False,
         }
         with patch("manual_automation.pdf.pdf_metrics", return_value=metrics):
             result = validate_pdf(
@@ -972,6 +1003,51 @@ class CanonicalizationTests(unittest.TestCase):
 
         self.assertEqual("review_required", report["status"])
         self.assertIn("monitor-only", " ".join(report["reasons"]))
+
+    def test_bookmarkless_pdf_requires_an_explicit_manual_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "legacy-manual-v1.0.0.pdf"
+            with fitz.open() as document:
+                for number in range(1, 3):
+                    page = document.new_page(width=842, height=595)
+                    page.insert_text(
+                        (72, 72),
+                        f"Version 1.0.0\nPage content {number}",
+                    )
+                document.save(source)
+
+            with self.assertRaisesRegex(
+                SourceFormatError,
+                "no longer contains top-level bookmarks",
+            ):
+                extract_pdf_snapshot(
+                    str(source),
+                    expected_chapters=0,
+                    source_version_fallback="1.0.0",
+                )
+
+            snapshot = extract_pdf_snapshot(
+                str(source),
+                expected_chapters=0,
+                source_version_fallback="1.0.0",
+                allow_bookmarkless=True,
+            )
+            validate_snapshot_integrity(snapshot)
+            configured_snapshot = _extract_configured_snapshot(
+                str(source),
+                {
+                    "source_kind": "pdf",
+                    "expected_chapter_count": 1,
+                    "expected_pdf_outline_count": 0,
+                    "allow_bookmarkless_pdf": True,
+                    "source_version_fallback": "1.0.0",
+                },
+            )
+
+        self.assertEqual(1, snapshot["chapter_count"])
+        self.assertEqual("Document", snapshot["chapters"][0]["title"])
+        self.assertEqual(2, snapshot["section_count"])
+        self.assertEqual(1, configured_snapshot["chapter_count"])
 
     def test_pdf_monitor_cannot_enter_automatic_update(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

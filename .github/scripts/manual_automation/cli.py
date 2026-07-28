@@ -70,8 +70,12 @@ def _extract_configured_snapshot(
                 )
         return extract_pdf_snapshot(
             resolved_source,
-            config["expected_chapter_count"],
+            config.get(
+                "expected_pdf_outline_count",
+                config["expected_chapter_count"],
+            ),
             source_version_fallback=config.get("source_version_fallback"),
+            allow_bookmarkless=bool(config.get("allow_bookmarkless_pdf", False)),
         )
     resolved_version = None
     version_source_url = config.get("version_source_url")

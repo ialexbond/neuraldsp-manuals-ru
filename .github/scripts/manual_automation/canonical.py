@@ -474,6 +474,8 @@ def extract_pdf_snapshot(
     source: str,
     expected_chapters: int | None = None,
     source_version_fallback: str | None = None,
+    *,
+    allow_bookmarkless: bool = False,
 ) -> dict[str, Any]:
     pdf_bytes, resolved_url = _load_binary_source(source)
     binary_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
@@ -495,7 +497,7 @@ def extract_pdf_snapshot(
                 f"Expected {expected_chapters} PDF chapters, but the upstream "
                 f"document contains {len(top_level)} top-level bookmarks."
             )
-        if not top_level:
+        if not top_level and not allow_bookmarkless:
             raise SourceFormatError(
                 "The upstream PDF no longer contains top-level bookmarks."
             )
@@ -525,9 +527,10 @@ def extract_pdf_snapshot(
         else:
             version = "unknown"
 
+        canonical_chapters = top_level or [(1, "Document", 1)]
         chapter_rows: list[dict[str, Any]] = []
         chapter_ids: set[str] = set()
-        for number, (_, title, start_page) in enumerate(top_level, start=1):
+        for number, (_, title, start_page) in enumerate(canonical_chapters, start=1):
             source_id = _pdf_source_id(title, f"chapter-{number:02d}")
             if source_id in chapter_ids:
                 source_id = f"{source_id}-{number:02d}"

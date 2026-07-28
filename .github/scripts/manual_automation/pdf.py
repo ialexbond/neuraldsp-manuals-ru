@@ -759,11 +759,14 @@ def validate_pdf(
         )
     if len(metrics["page_sizes"]) != 1:
         errors.append(f"inconsistent page sizes: {metrics['page_sizes']}")
-    elif any(
-        abs(actual - expected) > 1.0
-        for actual, expected in zip(
-            metrics["page_sizes"][0], (595.0, 842.0), strict=True
+    elif not any(
+        all(
+            abs(actual - expected) <= 1.0
+            for actual, expected in zip(
+                metrics["page_sizes"][0], expected_size, strict=True
+            )
         )
+        for expected_size in ((595.0, 842.0), (842.0, 595.0))
     ):
         errors.append(f"PDF page size is not A4: {metrics['page_sizes'][0]}")
     if metrics["internal_link_count"] < config["minimum_internal_link_count"]:
@@ -782,7 +785,7 @@ def validate_pdf(
             "chapter openers must start on a new page and include following content; "
             f"title-only pages={metrics['chapter_openers']['title_only_pages']}"
         )
-    if not metrics["tagged"]:
+    if config.get("require_tagged_pdf", True) and not metrics["tagged"]:
         errors.append("PDF is not tagged")
     if metrics["rendered_page_count"] != metrics["page_count"]:
         errors.append("not every PDF page rendered successfully")
