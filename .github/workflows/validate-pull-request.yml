@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Получить изменения из запроса на слияние
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Настроить Python
         uses: actions/setup-python@v7
@@ -31,6 +33,13 @@ jobs:
 
       - name: Установить зависимости для проверки
         run: python -m pip install -r .github/requirements.txt
+
+      - name: Проверить разделение публикуемых руководств
+        run: |
+          python .github/scripts/validate_publication.py \
+            --repository "$GITHUB_WORKSPACE" \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Запустить модульные тесты и проверку сценариев
         run: python -m unittest discover -s .github/tests -v

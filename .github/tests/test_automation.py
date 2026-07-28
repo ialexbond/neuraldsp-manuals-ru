@@ -10,7 +10,7 @@ import tempfile
 import textwrap
 import unittest
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
 import fitz
@@ -58,6 +58,11 @@ from manual_automation.translate import (  # noqa: E402
     _localized_unit_element,
     _refresh_toc_labels,
     apply_safe_update,
+)
+from validate_publication import (  # noqa: E402
+    PublicationValidationError,
+    validate_configuration_coverage,
+    validate_manual_pdf_changes,
 )
 
 
@@ -1149,6 +1154,52 @@ class TranslationMergeTests(unittest.TestCase):
 
 
 class RepositoryPolicyTests(unittest.TestCase):
+    def test_every_published_manual_has_exactly_one_configuration(self) -> None:
+        result = validate_configuration_coverage(REPOSITORY)
+
+        self.assertGreater(result["manual_directory_count"], 0)
+        self.assertEqual(
+            result["manual_directory_count"],
+            result["configuration_count"],
+        )
+
+    def test_two_different_manual_pdfs_are_rejected_in_one_pull_request(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            PublicationValidationError,
+            "only one manual PDF",
+        ):
+            validate_manual_pdf_changes(
+                [
+                    ("A", "manuals/first/First_RU_v1.0.0_rev2026-07-28.pdf"),
+                    ("A", "manuals/second/Second_RU_v1.0.0_rev2026-07-28.pdf"),
+                ]
+            )
+
+    def test_one_manual_pdf_and_its_same_directory_replacement_are_allowed(
+        self,
+    ) -> None:
+        result = validate_manual_pdf_changes(
+            [
+                (
+                    "R100",
+                    "manuals/example/Example_RU_v1.0.0_rev2026-07-27.pdf",
+                    "manuals/example/Example_RU_v1.0.1_rev2026-07-28.pdf",
+                ),
+                ("M", "README.md"),
+            ]
+        )
+
+        self.assertEqual(
+            [
+                PurePosixPath(
+                    "manuals/example/Example_RU_v1.0.1_rev2026-07-28.pdf"
+                )
+            ],
+            result,
+        )
+
     def test_public_filename_contains_version_and_revision_date(self) -> None:
         config = {
             "pdf_name_template": "Quad_Cortex_User_Manual_RU_v{version}_rev{date}.pdf"
@@ -1536,6 +1587,8 @@ class WorkflowContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("pull_request:", workflow)
         self.assertIn("name: Проверка репозитория", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn(".github/scripts/validate_publication.py", workflow)
         self.assertIn("python -m unittest discover -s .github/tests -v", workflow)
         self.assertIn("validate-repository", workflow)
         self.assertIn("contents: read", workflow)
