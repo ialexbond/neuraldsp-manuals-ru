@@ -6,7 +6,7 @@
 
 В этом репозитории собраны **неофициальные русские переводы** руководств Neural DSP в формате PDF. Это единый каталог инструкций для устройств, плагинов и программ Neural DSP — без сокращений исходного материала и с удобной навигацией внутри документов.
 
-Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X**, **Fortin Nameless Suite X**, **Archetype: Nolly X**, **Archetype: Mateus Asato**, **Parallax X**, **Soldano SLO-100 X**, **Omega Ampworks Granophyre**, **Fortin NTS Suite** и **Archetype: Abasi**. Остальные переводы будут добавляться по мере готовности.
+Сейчас опубликованы полные русские версии руководств пользователя **Quad Cortex**, **Quad Cortex mini**, **Nano Cortex** и плагинов **Archetype: John Mayer X**, **Darkglass Ultimate**, **Mantra**, **Archetype: Misha Mansoor X**, **Morgan Amps Suite**, **Archetype: Cory Wong X**, **Archetype: Tim Henson X**, **Archetype: Rabea X**, **Archetype: Gojira X**, **Archetype: Plini X**, **Archetype: Petrucci X**, **Fortin Nameless Suite X**, **Archetype: Nolly X**, **Archetype: Mateus Asato**, **Parallax X**, **Soldano SLO-100 X**, **Omega Ampworks Granophyre**, **Fortin NTS Suite**, **Archetype: Abasi** и **Archetype: Tom Morello**. Остальные переводы будут добавляться по мере готовности.
 
 **[Выбрать руководство](#доступные-руководства)** · **[Открыть все релизы](https://github.com/ialexbond/neuraldsp-manuals-ru/releases)** · **[Сообщить об ошибке](https://github.com/ialexbond/neuraldsp-manuals-ru/issues/new)**
 
@@ -42,6 +42,7 @@
 | Плагин | Omega Ampworks Granophyre | [1.0.2](https://downloads.neuraldsp.com/file/omega-granophyre-installers/Omega%20Ampworks%20Granophyre%20v1.0.2.pdf) | 28.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/omega-ampworks-granophyre-v1.0.2-ru.2026-07-28) |
 | Плагин | Fortin NTS Suite | [2.0.0](https://downloads.neuraldsp.com/file/fortin-nts-installers/Fortin-NTS-Suite-v2.0.0.pdf) | 28.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/fortin-nts-suite-v2.0.0-ru.2026-07-28) |
 | Плагин | Archetype: Abasi | [2.0.0](https://downloads.neuraldsp.com/file/archetype-abasi-installers/Archetype-Abasi-v2.0.0.pdf) | 28.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-abasi-v2.0.0-ru.2026-07-28) |
+| Плагин | Archetype: Tom Morello | [1.0.0](https://downloads.neuraldsp.com/file/archetype-tom-morello/v_1.0.0/Archetype%20Tom%20Morello%20v1.0.0.pdf) | 28.07.2026 | Опубликовано | [Открыть](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-tom-morello-v1.0.0-ru.2026-07-28) |
 <!-- MANUAL_STATUS:END -->
 
 ## Что внутри каждого PDF
@@ -230,6 +231,14 @@
 Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Abasi на русском языке:
 
 **[Открыть актуальный релиз Archetype: Abasi →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-abasi-v2.0.0-ru.2026-07-28)**
+
+## Руководство Archetype: Tom Morello
+
+Русская инструкция к плагину Neural DSP Archetype: Tom Morello 1.0.0 охватывает Dive Bomb Section, Amp Section, обе секции Amp FX Loop, Cab Section, EQ Section, Post FX Section, метроном, пресеты, MIDI, установку, активацию лицензии и настройку плагина.
+
+Если вам нужно полное руководство пользователя или мануал Neural DSP Archetype: Tom Morello на русском языке:
+
+**[Открыть актуальный релиз Archetype: Tom Morello →](https://github.com/ialexbond/neuraldsp-manuals-ru/releases/tag/archetype-tom-morello-v1.0.0-ru.2026-07-28)**
 
 ## Что публикуется в репозитории
 
